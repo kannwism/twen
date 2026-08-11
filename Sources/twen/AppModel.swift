@@ -7,6 +7,10 @@ final class AppModel: ObservableObject {
 
     @Published private(set) var engine: TwenEngine
     @Published private(set) var isSuppressed = false
+    /// Estimated wall-clock end of the running break. The engine only ticks every
+    /// 2s, so `breakRemaining` moves in jumps; the popover derives a smooth 1s
+    /// countdown from this date instead. Nil outside `.breakRunning`.
+    @Published private(set) var breakEndEstimate: Date?
 
     private let idleSource: any IdleSource
     private let suppression: any SuppressionChecking
@@ -69,6 +73,13 @@ final class AppModel: ObservableObject {
             print("twen: \(before.rawValue) -> \(engine.phase.rawValue) (accrued \(Int(engine.accrued))s)")
         }
         for effect in effects { desaturator.apply(effect) }
+        // Re-anchored on every engine update, so it self-corrects after coalesced
+        // ticks or an unlock that consumed part of the break.
+        if engine.phase == .breakRunning {
+            breakEndEstimate = Date().addingTimeInterval(engine.breakRemaining)
+        } else if breakEndEstimate != nil {
+            breakEndEstimate = nil
+        }
     }
 
     // MARK: - Notification plumbing
