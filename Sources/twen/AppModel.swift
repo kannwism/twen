@@ -15,11 +15,20 @@ final class AppModel: ObservableObject {
     init(
         idleSource: any IdleSource = SystemIdleSource(),
         suppression: any SuppressionChecking = NoSuppression(),
-        desaturator: any Desaturating = LoggingDesaturator()
+        desaturator: (any Desaturating)? = nil
     ) {
         self.idleSource = idleSource
         self.suppression = suppression
-        self.desaturator = desaturator
+        if let desaturator {
+            self.desaturator = desaturator
+        } else if BackdropDesaturator.isSupported {
+            self.desaturator = BackdropDesaturator()
+        } else {
+            // The private API vanished (future macOS?): stay functional, just invisible.
+            // A public-API overlay fallback backend is planned as a Phase 3 leaf.
+            print("twen: CABackdropLayer unavailable; falling back to logging only (no visual effect)")
+            self.desaturator = LoggingDesaturator()
+        }
         let fast = ProcessInfo.processInfo.environment["TWEN_FAST"] == "1"
         engine = TwenEngine(config: fast ? .fastDemo : EngineConfig())
         if fast { print("twen: TWEN_FAST demo timings active") }

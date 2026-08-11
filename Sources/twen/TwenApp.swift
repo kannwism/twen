@@ -32,6 +32,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setbuf(stdout, nil) // logs are our only eyes when run headless; don't buffer them
         // LSUIElement in the bundled Info.plist covers `make app`; this covers `swift run`.
         NSApp.setActivationPolicy(.accessory)
-        AppModel.shared.start()
+        if CommandLine.arguments.contains("--demo-ramp") {
+            runRampDemo()
+        } else {
+            AppModel.shared.start()
+        }
+    }
+
+    /// Exercises the visual path end to end without the timer: ramp down, hold
+    /// mid-flight, resume, restore, teardown. Kept as a permanent tuning tool.
+    private func runRampDemo() {
+        let desaturator: any Desaturating =
+            BackdropDesaturator.isSupported ? BackdropDesaturator() : LoggingDesaturator()
+        Task {
+            print("demo: ramp to gray over 4s")
+            desaturator.apply(.ramp(toSaturation: 0, over: 4))
+            try? await Task.sleep(for: .seconds(2))
+            print("demo: hold mid-ramp")
+            desaturator.apply(.hold(atSaturation: 0.5))
+            try? await Task.sleep(for: .seconds(2))
+            print("demo: resume to gray over 2s")
+            desaturator.apply(.ramp(toSaturation: 0, over: 2))
+            try? await Task.sleep(for: .seconds(4))
+            print("demo: restore over 3s")
+            desaturator.apply(.ramp(toSaturation: 1, over: 3))
+            try? await Task.sleep(for: .seconds(4))
+            print("demo: done")
+            NSApp.terminate(nil)
+        }
     }
 }

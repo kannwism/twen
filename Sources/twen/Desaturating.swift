@@ -1,7 +1,7 @@
 import TwenCore
 
-/// Applies engine effects to the actual displays. Phase 2 adds BackdropDesaturator
-/// (the CABackdropLayer backend proven in spike/a-backdrop); until then we just narrate.
+/// Applies engine effects to the actual displays. BackdropDesaturator is the real
+/// backend; LoggingDesaturator narrates when the private API is unavailable.
 @MainActor
 protocol Desaturating {
     func apply(_ effect: EngineEffect)
