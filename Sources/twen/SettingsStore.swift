@@ -32,32 +32,42 @@ final class SettingsStore: ObservableObject {
 
     // MARK: - Timing (all seconds)
 
+    // NOTE: unlike plain stored properties, @Published properties do NOT suppress
+    // observer re-entry — assigning a property inside its own didSet re-enters that
+    // didSet. Every clamp below must therefore guard on inequality, assign, and
+    // return; the re-entrant pass (now in range) is the one that persists.
+    // Unguarded self-assignment here recurses until the stack dies.
+
     @Published var workInterval: TimeInterval {
         didSet {
-            workInterval = Self.clamp(workInterval, to: Self.workIntervalRange)
+            let clamped = Self.clamp(workInterval, to: Self.workIntervalRange)
+            guard workInterval == clamped else { workInterval = clamped; return }
             timingChanged("workInterval", workInterval)
         }
     }
 
     @Published var breakLength: TimeInterval {
         didSet {
-            breakLength = Self.clamp(breakLength, to: Self.breakLengthRange)
+            let clamped = Self.clamp(breakLength, to: Self.breakLengthRange)
+            guard breakLength == clamped else { breakLength = clamped; return }
             timingChanged("breakLength", breakLength)
         }
     }
 
     @Published var rampDuration: TimeInterval {
         didSet {
-            rampDuration = Self.clamp(rampDuration, to: Self.rampDurationRange)
+            let clamped = Self.clamp(rampDuration, to: Self.rampDurationRange)
+            guard rampDuration == clamped else { rampDuration = clamped; return }
             timingChanged("rampDuration", rampDuration)
         }
     }
 
     @Published var idlePause: TimeInterval {
         didSet {
-            idlePause = Self.clamp(idlePause, to: Self.idlePauseRange)
+            let clamped = Self.clamp(idlePause, to: Self.idlePauseRange)
+            guard idlePause == clamped else { idlePause = clamped; return }
             timingChanged("idlePause", idlePause)
-            // Cascades through idleReset's own didSet, which persists and re-applies.
+            // Conditional, so the cascade terminates; idleReset's didSet persists it.
             if idleReset < idlePause + Self.idleResetMargin {
                 idleReset = idlePause + Self.idleResetMargin
             }
@@ -66,7 +76,8 @@ final class SettingsStore: ObservableObject {
 
     @Published var idleReset: TimeInterval {
         didSet {
-            idleReset = max(idleReset, idlePause + Self.idleResetMargin)
+            let clamped = max(idleReset, idlePause + Self.idleResetMargin)
+            guard idleReset == clamped else { idleReset = clamped; return }
             timingChanged("idleReset", idleReset)
             if breakSatisfyIdle > idleReset { breakSatisfyIdle = idleReset }
         }
@@ -74,7 +85,8 @@ final class SettingsStore: ObservableObject {
 
     @Published var breakSatisfyIdle: TimeInterval {
         didSet {
-            breakSatisfyIdle = Self.clamp(breakSatisfyIdle, to: Self.breakSatisfyIdleMinimum...idleReset)
+            let clamped = Self.clamp(breakSatisfyIdle, to: Self.breakSatisfyIdleMinimum...idleReset)
+            guard breakSatisfyIdle == clamped else { breakSatisfyIdle = clamped; return }
             timingChanged("breakSatisfyIdle", breakSatisfyIdle)
         }
     }

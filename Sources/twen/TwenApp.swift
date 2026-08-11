@@ -41,6 +41,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             runRampDemo()
         } else if CommandLine.arguments.contains("--check-suppression") {
             runSuppressionCheck()
+        } else if CommandLine.arguments.contains("--exercise-settings") {
+            runSettingsExercise()
         } else {
             AppModel.shared.start()
             AppModel.shared.hotkey.register()
@@ -57,6 +59,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let signals = monitor.activeSignals()
         print("suppression: verdict = \(signals.isEmpty ? "clear" : "suppressed \(signals)")")
         NSApp.terminate(nil)
+    }
+
+    /// Drives SettingsStore's setters programmatically against a throwaway defaults
+    /// suite — the exact path a Settings-window edit takes. Exists because an
+    /// unguarded @Published didSet self-assignment once recursed to a stack-overflow
+    /// crash on the first edit, which headless launch smoke tests can never catch.
+    private func runSettingsExercise() {
+        let suiteName = "dev.twen.settings-exercise"
+        guard let suite = UserDefaults(suiteName: suiteName) else { exit(1) }
+        suite.removePersistentDomain(forName: suiteName)
+        let store = SettingsStore(defaults: suite)
+        var failures = 0
+        func expect(_ label: String, _ actual: TimeInterval, _ wanted: TimeInterval) {
+            let ok = actual == wanted
+            if !ok { failures += 1 }
+            print("settings: \(label) = \(Int(actual)) (want \(Int(wanted))) \(ok ? "ok" : "FAIL")")
+        }
+        store.workInterval = 25 * 60                       // plain in-range change
+        expect("workInterval in-range", store.workInterval, 25 * 60)
+        store.workInterval = 1                             // clamps to floor
+        expect("workInterval clamped", store.workInterval, 5 * 60)
+        store.idlePause = 600                              // cascades idleReset up
+        expect("idlePause", store.idlePause, 600)
+        expect("idleReset cascaded", store.idleReset, 600 + SettingsStore.idleResetMargin)
+        store.idleReset = 60                               // below floor, clamps back
+        expect("idleReset clamped", store.idleReset, 600 + SettingsStore.idleResetMargin)
+        store.breakSatisfyIdle = 10_000                    // clamps to idleReset
+        expect("breakSatisfyIdle clamped", store.breakSatisfyIdle, store.idleReset)
+        suite.removePersistentDomain(forName: suiteName)
+        print("settings: exercise \(failures == 0 ? "passed" : "FAILED (\(failures))")")
+        exit(failures == 0 ? 0 : 1)
     }
 
     /// Exercises the visual path end to end without the timer: ramp down, hold
