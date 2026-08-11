@@ -26,6 +26,7 @@ struct TwenApp: App {
         case .ramping, .gray: "eye.trianglebadge.exclamationmark"
         case .breakRunning: "timer"
         case .breakSatisfied: "checkmark.circle"
+        case .snoozed: "zzz"
         }
     }
 }

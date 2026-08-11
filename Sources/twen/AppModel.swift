@@ -1,5 +1,12 @@
 import AppKit
+import IOKit.ps
 import TwenCore
+
+/// Why twen is currently paused — drives the popover's status line.
+enum PauseReason: Equatable {
+    case manual(until: Date?)
+    case battery
+}
 
 @MainActor
 final class AppModel: ObservableObject {
@@ -11,6 +18,12 @@ final class AppModel: ObservableObject {
     /// 2s, so `breakRemaining` moves in jumps; the popover derives a smooth 1s
     /// countdown from this date instead. Nil outside `.breakRunning`.
     @Published private(set) var breakEndEstimate: Date?
+    /// Non-nil exactly while the engine is snoozed; cleared on resume, expiry,
+    /// or anything else that moves the engine out of `.snoozed`.
+    @Published private(set) var pauseReason: PauseReason?
+    /// Concrete suppression details for the popover, e.g. ["power-assertion: zoom.us"].
+    /// Empty when not suppressed or when the checker can't itemize its signals.
+    @Published private(set) var suppressionSignals: [String] = []
 
     /// Owned here (not by AppDelegate) so the settings UI can unregister/re-register
     /// the shortcut live. Callback behavior is unchanged: pressed → requestBreak().
@@ -20,6 +33,7 @@ final class AppModel: ObservableObject {
     private let suppression: any SuppressionChecking
     private let desaturator: any Desaturating
     private var pollTask: Task<Void, Never>?
+    private var wasOnBattery = false
 
     init(
         idleSource: any IdleSource = SystemIdleSource(),
@@ -70,10 +84,65 @@ final class AppModel: ObservableObject {
         print("twen: config updated")
     }
 
+    // MARK: - Pause / resume
+
+    func pause(for duration: TimeInterval) {
+        let until = Date().addingTimeInterval(duration)
+        pauseReason = .manual(until: until)
+        send(.snoozeRequested(until: until))
+    }
+
+    /// "Tomorrow" means the next 4 AM, not midnight, so a pause taken during a
+    /// late-night session doesn't spring back an hour later.
+    func pauseUntilTomorrow() {
+        guard let until = Calendar.current.nextDate(
+            after: Date(), matching: DateComponents(hour: 4, minute: 0), matchingPolicy: .nextTime
+        ) else { return }
+        pauseReason = .manual(until: until)
+        send(.snoozeRequested(until: until))
+    }
+
+    func resume() {
+        pauseReason = nil
+        send(.snoozeCancelled)
+    }
+
     private func tick() {
+        checkBattery()
         let suppressed = suppression.isSuppressed
         if suppressed != isSuppressed { isSuppressed = suppressed }
+        let signals = suppressed ? (suppression as? SuppressionMonitor)?.activeSignals() ?? [] : []
+        if signals != suppressionSignals { suppressionSignals = signals }
         send(.tick(idle: idleSource.secondsSinceLastInput, suppressed: suppressed))
+    }
+
+    /// Battery-conditional pause (Settings toggle; we only read the key). Snoozing
+    /// fires on the AC->battery *transition*, so a manual resume while still on
+    /// battery sticks; the cancel fires on state (back on AC while battery-paused).
+    /// Manual pauses are never auto-cancelled by returning to AC.
+    private func checkBattery() {
+        guard UserDefaults.standard.bool(forKey: "pauseOnBattery") else {
+            wasOnBattery = false
+            return
+        }
+        let onBattery = Self.isOnBattery()
+        defer { wasOnBattery = onBattery }
+        if onBattery, !wasOnBattery, engine.phase != .snoozed {
+            print("twen: on battery, pausing")
+            pauseReason = .battery
+            send(.snoozeRequested(until: nil))
+        } else if !onBattery, pauseReason == .battery {
+            print("twen: back on AC, resuming")
+            pauseReason = nil
+            send(.snoozeCancelled)
+        }
+    }
+
+    private static func isOnBattery() -> Bool {
+        guard let snapshot = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
+              let type = IOPSGetProvidingPowerSourceType(snapshot)?.takeRetainedValue() as String?
+        else { return false }
+        return type == kIOPSBatteryPowerValue
     }
 
     private func send(_ event: EngineEvent) {
@@ -81,6 +150,11 @@ final class AppModel: ObservableObject {
         let effects = engine.handle(event, at: Date())
         if engine.phase != before {
             print("twen: \(before.rawValue) -> \(engine.phase.rawValue) (accrued \(Int(engine.accrued))s)")
+        }
+        // The snooze ended without going through resume() — deadline expiry on a
+        // tick, or a break request cutting the pause short. Drop the stale reason.
+        if before == .snoozed, engine.phase != .snoozed, pauseReason != nil {
+            pauseReason = nil
         }
         for effect in effects { desaturator.apply(effect) }
         // Re-anchored on every engine update, so it self-corrects after coalesced

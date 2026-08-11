@@ -239,6 +239,74 @@ private struct Sim {
     #expect(sim.engine.phase == .waiting)
 }
 
+// MARK: - Snooze
+
+@Test func snoozeWhileGrayRestoresColorAndResets() {
+    var sim = Sim()
+    sim.workToGray()
+    sim.send(.snoozeRequested(until: sim.now + 100))
+    #expect(sim.lastEffects.contains(.ramp(toSaturation: 1, over: 5)))
+    #expect(sim.engine.phase == .snoozed)
+    #expect(sim.engine.accrued == 0)
+    #expect(sim.engine.rampProgress == 0)
+}
+
+@Test func activeTicksBeforeDeadlineStaySnoozedAndAccrueNothing() {
+    var sim = Sim()
+    sim.work(30)
+    sim.send(.snoozeRequested(until: sim.now + 100))
+    #expect(sim.lastEffects.isEmpty) // full color already; nothing to restore
+    sim.work(60) // typing away, still before the deadline
+    #expect(sim.engine.phase == .snoozed)
+    #expect(sim.engine.accrued == 0)
+    #expect(sim.collected.isEmpty)
+}
+
+@Test func snoozeExpiresToWaitingThenActivityResumesWork() {
+    var sim = Sim()
+    sim.send(.snoozeRequested(until: sim.now + 30))
+    sim.work(30) // last tick lands exactly on the deadline
+    #expect(sim.engine.phase == .waiting)
+    #expect(sim.engine.snoozeUntil == nil)
+    sim.work(4)
+    #expect(sim.engine.phase == .working)
+    #expect(sim.engine.accrued > 0)
+}
+
+@Test func indefiniteSnoozeNeverExpiresUntilCancelled() {
+    var sim = Sim()
+    sim.send(.snoozeRequested(until: nil))
+    sim.work(300) // far past every threshold in the config
+    #expect(sim.engine.phase == .snoozed)
+    sim.send(.snoozeCancelled)
+    #expect(sim.lastEffects.isEmpty)
+    #expect(sim.engine.phase == .waiting)
+    sim.send(.snoozeCancelled) // no-op outside .snoozed
+    #expect(sim.engine.phase == .waiting)
+}
+
+@Test func lockThenUnlockWhileSnoozedKeepsSnooze() {
+    var sim = Sim()
+    let deadline = sim.now + 1000
+    sim.send(.snoozeRequested(until: deadline))
+
+    sim.send(.lockOrSleep)
+    sim.wait(30) // short: under idleReset
+    sim.send(.unlock)
+    #expect(sim.engine.phase == .snoozed)
+    #expect(sim.engine.snoozeUntil == deadline)
+
+    sim.send(.lockOrSleep)
+    sim.wait(70) // long: past idleReset
+    sim.send(.unlock)
+    #expect(sim.engine.phase == .snoozed)
+    #expect(sim.engine.snoozeUntil == deadline)
+
+    sim.work(10) // ticks after the round trips still respect the snooze
+    #expect(sim.engine.phase == .snoozed)
+    #expect(sim.engine.accrued == 0)
+}
+
 @Test func lockMidRampHoldsThenShortUnlockResumes() {
     var sim = Sim()
     sim.workToRamp()
