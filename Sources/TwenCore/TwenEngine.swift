@@ -50,6 +50,7 @@ public enum TwenPhase: String, Equatable, Sendable {
     case gray             // fully desaturated, holding until a break
     case breakRunning     // break countdown; saturation ramping back
     case breakSatisfied   // idle >= breakSatisfyIdle while desaturated; awaiting next input
+    case snoozed          // user paused twen; no accrual until the deadline (nil = indefinite)
 }
 
 public enum EngineEvent: Equatable, Sendable {
@@ -57,6 +58,8 @@ public enum EngineEvent: Equatable, Sendable {
     case breakRequested
     case lockOrSleep      // screen lock, system sleep, fast-user-switch away
     case unlock           // unlock, wake, session became active
+    case snoozeRequested(until: Date?)  // nil = indefinite (e.g. while on battery)
+    case snoozeCancelled
 }
 
 public enum EngineEffect: Equatable, Sendable {
@@ -72,6 +75,9 @@ public struct TwenEngine: Sendable {
     /// 0 = full color, 1 = fully gray.
     public private(set) var rampProgress: Double = 0
     public private(set) var breakRemaining: TimeInterval = 0
+    /// Deadline of the current snooze; nil while snoozed means indefinite. Only
+    /// non-nil in `.snoozed` — expiry and cancellation both clear it.
+    public private(set) var snoozeUntil: Date?
     /// Mutable so settings changes apply live; new values take effect on the next
     /// tick. An in-flight visual ramp keeps its originally scheduled duration.
     public var config: EngineConfig
@@ -92,6 +98,8 @@ public struct TwenEngine: Sendable {
         case .breakRequested: return startBreak()
         case .lockOrSleep: return locked(at: now)
         case .unlock: return unlocked(at: now)
+        case let .snoozeRequested(until): return snooze(until: until)
+        case .snoozeCancelled: return cancelSnooze()
         }
     }
 
@@ -158,6 +166,13 @@ public struct TwenEngine: Sendable {
         case .breakRunning:
             breakRemaining -= dt
             if breakRemaining <= 0 { reset() }
+
+        case .snoozed:
+            // Idle and suppression are irrelevant while snoozed: no accrual, no effects.
+            if let until = snoozeUntil, now >= until {
+                snoozeUntil = nil
+                phase = .waiting // fresh start; next activity begins accrual
+            }
         }
         return effects
     }
@@ -171,6 +186,26 @@ public struct TwenEngine: Sendable {
         let wasDesaturated = rampProgress > 0
         rampProgress = 0
         return wasDesaturated ? [.ramp(toSaturation: 1, over: config.breakLength)] : []
+    }
+
+    /// Pausing means "stop nagging me": any gray drains away now, and the work
+    /// timer starts fresh whenever the snooze ends. Valid from every phase.
+    private mutating func snooze(until: Date?) -> [EngineEffect] {
+        let effects: [EngineEffect] =
+            rampProgress > 0 ? [.ramp(toSaturation: 1, over: config.satisfiedRestore)] : []
+        accrued = 0
+        rampProgress = 0
+        breakRemaining = 0
+        snoozeUntil = until
+        phase = .snoozed
+        return effects
+    }
+
+    private mutating func cancelSnooze() -> [EngineEffect] {
+        guard phase == .snoozed else { return [] }
+        snoozeUntil = nil
+        phase = .waiting
+        return []
     }
 
     private mutating func locked(at now: Date) -> [EngineEffect] {
@@ -217,7 +252,9 @@ public struct TwenEngine: Sendable {
             if breakRemaining <= 0 { reset() }
             return []
 
-        case .waiting, .breakSatisfied:
+        case .waiting, .breakSatisfied, .snoozed:
+            // A lock/unlock round trip never disturbs a snooze: expiry (if any)
+            // is adjudicated by the next tick against the wall clock.
             return []
         }
     }

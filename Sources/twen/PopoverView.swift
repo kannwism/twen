@@ -11,7 +11,7 @@ struct PopoverView: View {
             phaseContent
 
             if model.isSuppressed {
-                Text("on hold — video or presentation detected")
+                Text(suppressionLine)
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
@@ -72,6 +72,15 @@ struct PopoverView: View {
             Text("Break taken — color returns when you're back.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+
+        case .snoozed:
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Reminders are paused")
+                    .foregroundStyle(.secondary)
+                Text("The timer starts fresh when you resume.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
         }
     }
 
@@ -133,6 +142,28 @@ struct PopoverView: View {
         Int(engine.config.breakLength.rounded())
     }
 
+    private var suppressionLine: String {
+        if let signal = model.suppressionSignals.first {
+            return "on hold — \(signal)"
+        }
+        return "on hold — video or presentation detected"
+    }
+
+    /// "Paused until 14:30" / "Paused until tomorrow" / "Paused while on battery" / "Paused".
+    private var pausedLine: String {
+        switch model.pauseReason {
+        case .battery:
+            return "Paused while on battery"
+        case .manual(let until?):
+            if Calendar.current.isDateInToday(until) {
+                return "Paused until \(until.formatted(date: .omitted, time: .shortened))"
+            }
+            return "Paused until tomorrow"
+        case .manual(nil), nil:
+            return "Paused"
+        }
+    }
+
     // MARK: - Actions
 
     private var actions: some View {
@@ -143,10 +174,36 @@ struct PopoverView: View {
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
+            pauseControls
             Button("Quit twen") { NSApp.terminate(nil) }
                 .buttonStyle(.plain)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    /// A subtle Pause menu normally; a Resume button plus status line while snoozed.
+    @ViewBuilder
+    private var pauseControls: some View {
+        if engine.phase == .snoozed {
+            HStack(spacing: 8) {
+                Button("Resume") { model.resume() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                Text(pausedLine)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } else {
+            Menu("Pause") {
+                Button("For 1 hour") { model.pause(for: 60 * 60) }
+                Button("Until tomorrow") { model.pauseUntilTomorrow() }
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize()
         }
     }
 
