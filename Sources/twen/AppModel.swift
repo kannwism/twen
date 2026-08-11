@@ -6,6 +6,7 @@ final class AppModel: ObservableObject {
     static let shared = AppModel()
 
     @Published private(set) var engine: TwenEngine
+    @Published private(set) var isSuppressed = false
 
     private let idleSource: any IdleSource
     private let suppression: any SuppressionChecking
@@ -56,7 +57,9 @@ final class AppModel: ObservableObject {
     func requestBreak() { send(.breakRequested) }
 
     private func tick() {
-        send(.tick(idle: idleSource.secondsSinceLastInput, suppressed: suppression.isSuppressed))
+        let suppressed = suppression.isSuppressed
+        if suppressed != isSuppressed { isSuppressed = suppressed }
+        send(.tick(idle: idleSource.secondsSinceLastInput, suppressed: suppressed))
     }
 
     private func send(_ event: EngineEvent) {
