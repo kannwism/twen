@@ -28,6 +28,8 @@ struct TwenApp: App {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private let hotkey = HotkeyManager()
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         setbuf(stdout, nil) // logs are our only eyes when run headless; don't buffer them
         // LSUIElement in the bundled Info.plist covers `make app`; this covers `swift run`.
@@ -38,6 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             runSuppressionCheck()
         } else {
             AppModel.shared.start()
+            hotkey.register()
         }
     }
 
