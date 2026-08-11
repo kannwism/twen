@@ -89,6 +89,8 @@ final class HotkeyManager {
 
     private func pressed() {
         AppModel.shared.requestBreak()
+        // Surface the countdown for keyboard-only use; harmless no-op if it fails.
+        MenuBarPresenter.openPopover()
     }
 
     // MARK: - Display

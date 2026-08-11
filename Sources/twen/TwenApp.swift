@@ -43,6 +43,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             runSuppressionCheck()
         } else if CommandLine.arguments.contains("--exercise-settings") {
             runSettingsExercise()
+        } else if CommandLine.arguments.contains("--probe-popover") {
+            runPopoverProbe()
         } else {
             AppModel.shared.start()
             AppModel.shared.hotkey.register()
@@ -59,6 +61,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let signals = monitor.activeSignals()
         print("suppression: verdict = \(signals.isEmpty ? "clear" : "suppressed \(signals)")")
         NSApp.terminate(nil)
+    }
+
+    /// Verifies the MenuBarPresenter hack against the running OS: waits for the
+    /// status item to exist, clicks it programmatically, reports whether the
+    /// MenuBarExtra window actually became visible. Guards the hotkey-opens-popover
+    /// feature against SwiftUI internals changing across macOS releases.
+    private func runPopoverProbe() {
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            MenuBarPresenter.openPopover()
+            try? await Task.sleep(for: .seconds(1))
+            let opened = MenuBarPresenter.isPopoverVisible
+            print("menubar: probe \(opened ? "opened OK" : "FAILED to open")")
+            exit(opened ? 0 : 1)
+        }
     }
 
     /// Drives SettingsStore's setters programmatically against a throwaway defaults
