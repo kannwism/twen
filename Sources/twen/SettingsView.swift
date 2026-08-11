@@ -27,7 +27,7 @@ struct SettingsView: View {
     private var timingSection: some View {
         Section("Timing") {
             timingRow("Work interval", value: $store.workInterval,
-                      in: SettingsStore.workIntervalRange, step: 5 * 60)
+                      in: SettingsStore.workIntervalRange, step: 60)
             timingRow("Break length", value: $store.breakLength,
                       in: SettingsStore.breakLengthRange, step: 5)
             timingRow("Fade duration", value: $store.rampDuration,
@@ -49,9 +49,15 @@ struct SettingsView: View {
         step: TimeInterval
     ) -> some View {
         LabeledContent(title) {
-            Stepper(Self.duration(value.wrappedValue), value: value, in: range, step: step)
-                .monospacedDigit()
-                .fixedSize()
+            // Value first (right-aligned column), bare stepper last: the chevrons
+            // land on one shared right edge regardless of the value's text width.
+            HStack(spacing: 8) {
+                Text(Self.duration(value.wrappedValue))
+                    .monospacedDigit()
+                    .frame(minWidth: 76, alignment: .trailing)
+                Stepper("", value: value, in: range, step: step)
+                    .labelsHidden()
+            }
         }
     }
 
