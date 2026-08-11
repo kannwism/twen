@@ -12,6 +12,10 @@ final class AppModel: ObservableObject {
     /// countdown from this date instead. Nil outside `.breakRunning`.
     @Published private(set) var breakEndEstimate: Date?
 
+    /// Owned here (not by AppDelegate) so the settings UI can unregister/re-register
+    /// the shortcut live. Callback behavior is unchanged: pressed → requestBreak().
+    let hotkey = HotkeyManager()
+
     private let idleSource: any IdleSource
     private let suppression: any SuppressionChecking
     private let desaturator: any Desaturating
@@ -35,7 +39,7 @@ final class AppModel: ObservableObject {
             self.desaturator = LoggingDesaturator()
         }
         let fast = ProcessInfo.processInfo.environment["TWEN_FAST"] == "1"
-        engine = TwenEngine(config: fast ? .fastDemo : EngineConfig())
+        engine = TwenEngine(config: fast ? .fastDemo : SettingsStore.shared.engineConfig)
         if fast { print("twen: TWEN_FAST demo timings active") }
     }
 
@@ -59,6 +63,12 @@ final class AppModel: ObservableObject {
     }
 
     func requestBreak() { send(.breakRequested) }
+
+    /// Live-applies a settings change; the engine picks it up on its next tick.
+    func apply(config: EngineConfig) {
+        engine.config = config
+        print("twen: config updated")
+    }
 
     private func tick() {
         let suppressed = suppression.isSuppressed

@@ -4,8 +4,7 @@ import Carbon.HIToolbox
 /// Global keyboard shortcut via Carbon `RegisterEventHotKey` — the one API that
 /// works without Accessibility permission (spec requirement). Default ⌥⌘B;
 /// overridable via the `hotkeyKeyCode` / `hotkeyModifiers` UserDefaults keys
-/// (Carbon virtual keycode and modifier flag values), which the settings UI
-/// will write in a later wave.
+/// (Carbon virtual keycode and modifier flag values), written by SettingsStore.
 @MainActor
 final class HotkeyManager {
     // Mutated only on the main actor; nonisolated(unsafe) solely so the
@@ -52,6 +51,13 @@ final class HotkeyManager {
         print("hotkey: registered \(Self.describe(keyCode: keyCode, modifiers: modifiers))")
     }
 
+    /// Re-reads the UserDefaults keys and swaps the registration; called by
+    /// SettingsStore after persisting a new combo.
+    func reRegister() {
+        unregister()
+        register()
+    }
+
     func unregister() {
         if let hotKeyRef {
             UnregisterEventHotKey(hotKeyRef)
@@ -87,7 +93,8 @@ final class HotkeyManager {
 
     // MARK: - Display
 
-    private static func describe(keyCode: UInt32, modifiers: UInt32) -> String {
+    /// Human-readable combo, e.g. "⌥⌘B". Also used by the settings UI.
+    static func describe(keyCode: UInt32, modifiers: UInt32) -> String {
         var combo = ""
         if modifiers & UInt32(controlKey) != 0 { combo += "⌃" }
         if modifiers & UInt32(optionKey) != 0 { combo += "⌥" }
@@ -109,5 +116,15 @@ final class HotkeyManager {
         kVK_ANSI_4: "4", kVK_ANSI_5: "5", kVK_ANSI_6: "6", kVK_ANSI_7: "7",
         kVK_ANSI_8: "8", kVK_ANSI_9: "9",
         kVK_Space: "Space", kVK_Return: "Return", kVK_Escape: "Esc", kVK_Tab: "Tab",
+        kVK_ANSI_Comma: ",", kVK_ANSI_Period: ".", kVK_ANSI_Slash: "/",
+        kVK_ANSI_Semicolon: ";", kVK_ANSI_Quote: "'", kVK_ANSI_LeftBracket: "[",
+        kVK_ANSI_RightBracket: "]", kVK_ANSI_Backslash: "\\", kVK_ANSI_Minus: "-",
+        kVK_ANSI_Equal: "=", kVK_ANSI_Grave: "`",
+        kVK_LeftArrow: "←", kVK_RightArrow: "→", kVK_UpArrow: "↑", kVK_DownArrow: "↓",
+        kVK_Delete: "⌫", kVK_ForwardDelete: "⌦",
+        kVK_Home: "Home", kVK_End: "End", kVK_PageUp: "PgUp", kVK_PageDown: "PgDn",
+        kVK_F1: "F1", kVK_F2: "F2", kVK_F3: "F3", kVK_F4: "F4", kVK_F5: "F5",
+        kVK_F6: "F6", kVK_F7: "F7", kVK_F8: "F8", kVK_F9: "F9", kVK_F10: "F10",
+        kVK_F11: "F11", kVK_F12: "F12",
     ]
 }

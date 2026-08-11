@@ -3,6 +3,7 @@ import TwenCore
 
 struct PopoverView: View {
     @ObservedObject var model: AppModel
+    @ObservedObject private var settings = SettingsStore.shared
 
     private var engine: TwenEngine { model.engine }
 
@@ -139,14 +140,17 @@ struct PopoverView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 breakButton
-                Text("⌥⌘B")
+                Text(settings.comboDescription)
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
-            Button("Quit twen") { NSApp.terminate(nil) }
-                .buttonStyle(.plain)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                SettingsOpenButton()
+                Button("Quit twen") { NSApp.terminate(nil) }
+            }
+            .buttonStyle(.plain)
+            .font(.caption)
+            .foregroundStyle(.secondary)
         }
     }
 
