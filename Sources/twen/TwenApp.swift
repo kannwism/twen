@@ -34,9 +34,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         if CommandLine.arguments.contains("--demo-ramp") {
             runRampDemo()
+        } else if CommandLine.arguments.contains("--check-suppression") {
+            runSuppressionCheck()
         } else {
             AppModel.shared.start()
         }
+    }
+
+    /// Prints each suppression signal's current state and the overall verdict, then exits.
+    /// Touches nothing visual — a permanent diagnostic, like --demo-ramp is for the ramp.
+    private func runSuppressionCheck() {
+        let monitor = SuppressionMonitor()
+        for (name, detail) in monitor.signalStates() {
+            print("suppression: \(name) = \(detail ?? "none")")
+        }
+        let signals = monitor.activeSignals()
+        print("suppression: verdict = \(signals.isEmpty ? "clear" : "suppressed \(signals)")")
+        NSApp.terminate(nil)
     }
 
     /// Exercises the visual path end to end without the timer: ramp down, hold

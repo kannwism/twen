@@ -15,7 +15,7 @@ final class AppModel: ObservableObject {
 
     init(
         idleSource: any IdleSource = SystemIdleSource(),
-        suppression: any SuppressionChecking = NoSuppression(),
+        suppression: any SuppressionChecking = SuppressionMonitor(),
         desaturator: (any Desaturating)? = nil
     ) {
         self.idleSource = idleSource
