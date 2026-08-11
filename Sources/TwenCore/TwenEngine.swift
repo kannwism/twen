@@ -72,7 +72,9 @@ public struct TwenEngine: Sendable {
     /// 0 = full color, 1 = fully gray.
     public private(set) var rampProgress: Double = 0
     public private(set) var breakRemaining: TimeInterval = 0
-    public let config: EngineConfig
+    /// Mutable so settings changes apply live; new values take effect on the next
+    /// tick. An in-flight visual ramp keeps its originally scheduled duration.
+    public var config: EngineConfig
 
     public var saturation: Double { 1 - rampProgress }
 
