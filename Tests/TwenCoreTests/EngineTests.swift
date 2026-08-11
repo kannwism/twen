@@ -3,7 +3,8 @@ import Testing
 @testable import TwenCore
 
 /// Deterministic simulation harness: a marching clock, ticks every 2s.
-/// Scaled config keeps tests readable: 100s work interval, 20s ramp, 10s break.
+/// Scaled config keeps tests readable: 100s work interval, 20s ramp, 10s break,
+/// and breakSatisfyIdle (30) deliberately distinct from idleReset (60).
 private struct Sim {
     var engine: TwenEngine
     var now = Date(timeIntervalSinceReferenceDate: 0)
@@ -13,7 +14,7 @@ private struct Sim {
 
     init(_ config: EngineConfig = EngineConfig(
         workInterval: 100, breakLength: 10, rampDuration: 20,
-        idlePause: 20, idleReset: 60, satisfiedRestore: 5
+        idlePause: 20, idleReset: 60, breakSatisfyIdle: 30, satisfiedRestore: 5
     )) {
         engine = TwenEngine(config: config)
     }
@@ -162,6 +163,18 @@ private struct Sim {
     #expect(sim.engine.accrued == 0)
 }
 
+@Test func desaturatedIdleSatisfiesBeforeResetThreshold() {
+    var sim = Sim()
+    sim.workToRamp()
+    sim.goIdle(34) // crosses breakSatisfyIdle (30) but stays under idleReset (60):
+    #expect(sim.engine.phase == .breakSatisfied) // a minute away rests the eyes…
+
+    var sim2 = Sim()
+    sim2.work(30)
+    sim2.goIdle(34) // …but the same idle stretch while WORKING only pauses
+    #expect(sim2.engine.phase == .paused)
+}
+
 @Test func manualBreakRestoresColorAndResets() {
     var sim = Sim()
     sim.workToGray()
@@ -235,7 +248,7 @@ private struct Sim {
     sim.send(.lockOrSleep)
     #expect(sim.lastEffects.contains(.hold(atSaturation: 1 - progress)))
 
-    sim.wait(30) // under idleReset: pause only, ramp resumes
+    sim.wait(20) // under breakSatisfyIdle: ramp resumes
     sim.send(.unlock)
     guard case let .ramp(to, over)? = sim.lastEffects.first else {
         Issue.record("expected resume ramp effect")

@@ -6,14 +6,19 @@ public struct EngineConfig: Equatable, Sendable {
     public var rampDuration: TimeInterval
     public var idlePause: TimeInterval
     public var idleReset: TimeInterval
+    /// Idle time while desaturated that counts the break as taken. Deliberately much
+    /// shorter than idleReset: reading without input is still screen time (so the work
+    /// timer shouldn't reset quickly), but a minute genuinely away rests the eyes.
+    public var breakSatisfyIdle: TimeInterval
     public var satisfiedRestore: TimeInterval
 
     public init(
         workInterval: TimeInterval = 20 * 60,
         breakLength: TimeInterval = 20,
         rampDuration: TimeInterval = 2 * 60,
-        idlePause: TimeInterval = 20,
-        idleReset: TimeInterval = 60,
+        idlePause: TimeInterval = 60,
+        idleReset: TimeInterval = 3 * 60,
+        breakSatisfyIdle: TimeInterval = 60,
         satisfiedRestore: TimeInterval = 5
     ) {
         self.workInterval = workInterval
@@ -21,6 +26,7 @@ public struct EngineConfig: Equatable, Sendable {
         self.rampDuration = rampDuration
         self.idlePause = idlePause
         self.idleReset = idleReset
+        self.breakSatisfyIdle = breakSatisfyIdle
         self.satisfiedRestore = satisfiedRestore
     }
 
@@ -31,6 +37,7 @@ public struct EngineConfig: Equatable, Sendable {
         rampDuration: 10,
         idlePause: 10,
         idleReset: 20,
+        breakSatisfyIdle: 10,
         satisfiedRestore: 3
     )
 }
@@ -42,7 +49,7 @@ public enum TwenPhase: String, Equatable, Sendable {
     case ramping          // desaturation ramp in progress
     case gray             // fully desaturated, holding until a break
     case breakRunning     // break countdown; saturation ramping back
-    case breakSatisfied   // idle >= idleReset while desaturated; awaiting next input
+    case breakSatisfied   // idle >= breakSatisfyIdle while desaturated; awaiting next input
 }
 
 public enum EngineEvent: Equatable, Sendable {
@@ -123,7 +130,7 @@ public struct TwenEngine: Sendable {
             }
 
         case .ramping:
-            if idle >= config.idleReset {
+            if idle >= config.breakSatisfyIdle {
                 phase = .breakSatisfied
                 effects.append(.hold(atSaturation: saturation))
             } else if suppressed {
@@ -137,7 +144,7 @@ public struct TwenEngine: Sendable {
             }
 
         case .gray:
-            if idle >= config.idleReset { phase = .breakSatisfied }
+            if idle >= config.breakSatisfyIdle { phase = .breakSatisfied }
 
         case .breakSatisfied:
             if idle < config.idlePause {
@@ -181,7 +188,7 @@ public struct TwenEngine: Sendable {
 
         switch phase {
         case .ramping, .gray:
-            if away >= config.idleReset {
+            if away >= config.breakSatisfyIdle {
                 // Break satisfied while away; the unlock itself is the "next input".
                 reset()
                 return [.ramp(toSaturation: 1, over: config.satisfiedRestore)]

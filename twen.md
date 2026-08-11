@@ -22,10 +22,10 @@ Existing apps are heavy or aggressive. twen nudges instead of blocking.
 ## Timer semantics
 
 - Work timer accrues only during active input.
-- Idle 20s–1 min → pause timer.
-- Idle >1 min → reset timer.
-- Idle ≥1 min while desaturated → break satisfied.
-- Screen lock / sleep / user switch → treated as idle from that moment, same thresholds: unlock within 1 min just pauses accrual, longer resets.
+- Idle 1–3 min → pause timer. (Was 20s–1 min; reading without input is still screen time, so short input gaps must not reset the timer.)
+- Idle >3 min → reset timer.
+- Idle ≥1 min while desaturated → break satisfied (separate threshold from the reset: a minute genuinely away rests the eyes).
+- Screen lock / sleep / user switch → treated as idle from that moment, same thresholds: unlock within 3 min just pauses accrual, longer resets; ≥1 min while desaturated satisfies the break.
 - Timer starts from first real activity, not app launch.
 
 ## Things to poll
