@@ -85,7 +85,9 @@ Suppression pauses the ramp; it does not consume the break.
 
 ## Distribution
 
-- Open source.
+- Open source under GPLv3. Marian Kannwischer retains sole copyright to keep dual
+  licensing open (a pro version or commercial licenses later); outside contributions
+  therefore need a CLA or copyright assignment before merging.
 - Notarized `.dmg` on GitHub Releases.
 - Homebrew cask (`brew install --cask twen`).
 - Sparkle for in-app updates.
