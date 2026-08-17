@@ -18,6 +18,10 @@ final class AppModel: ObservableObject {
     /// 2s, so `breakRemaining` moves in jumps; the popover derives a smooth 1s
     /// countdown from this date instead. Nil outside `.breakRunning`.
     @Published private(set) var breakEndEstimate: Date?
+    /// Seconds left in the running break as a zero-padded two-digit string
+    /// ("20", "09") for the menu bar label — always two digits so the status
+    /// item never changes width mid-countdown. Nil outside `.breakRunning`.
+    @Published private(set) var menuCountdown: String?
     /// Non-nil exactly while the engine is snoozed; cleared on resume, expiry,
     /// or anything else that moves the engine out of `.snoozed`.
     @Published private(set) var pauseReason: PauseReason?
@@ -33,6 +37,7 @@ final class AppModel: ObservableObject {
     private let suppression: any SuppressionChecking
     private let desaturator: any Desaturating
     private var pollTask: Task<Void, Never>?
+    private var countdownTask: Task<Void, Never>?
     private var wasOnBattery = false
 
     init(
@@ -64,7 +69,7 @@ final class AppModel: ObservableObject {
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2))
-                self?.tick()
+                self?.pollNow()
             }
         }
 
@@ -107,7 +112,11 @@ final class AppModel: ObservableObject {
         send(.snoozeCancelled)
     }
 
-    private func tick() {
+    /// One poll of idle/suppression/battery plus an engine tick. Internal (not
+    /// just the poll loop's) because the menu's .common-modes refresh timer also
+    /// drives it while an open menu stalls the Task loop; the engine integrates
+    /// wall-clock dt, so overlapping tickers are harmless.
+    func pollNow() {
         checkBattery()
         let suppressed = suppression.isSuppressed
         if suppressed != isSuppressed { isSuppressed = suppressed }
@@ -164,6 +173,37 @@ final class AppModel: ObservableObject {
         } else if breakEndEstimate != nil {
             breakEndEstimate = nil
         }
+        updateCountdownTicker()
+    }
+
+    // MARK: - Menu bar countdown
+
+    /// Runs a small ticker only while a break is running. It polls at 0.5s but
+    /// publishes only when the displayed second actually changes, so the status
+    /// item redraws at most once per second and the boundary never lags a full
+    /// tick behind the wall clock.
+    private func updateCountdownTicker() {
+        if engine.phase == .breakRunning {
+            refreshMenuCountdown()
+            guard countdownTask == nil else { return }
+            countdownTask = Task { [weak self] in
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(0.5))
+                    self?.refreshMenuCountdown()
+                }
+            }
+        } else if countdownTask != nil || menuCountdown != nil {
+            countdownTask?.cancel()
+            countdownTask = nil
+            menuCountdown = nil
+        }
+    }
+
+    private func refreshMenuCountdown() {
+        guard let end = breakEndEstimate else { return }
+        let remaining = max(0, end.timeIntervalSinceNow.rounded(.up))
+        let text = String(format: "%02d", min(Int(remaining), 99))
+        if menuCountdown != text { menuCountdown = text }
     }
 
     // MARK: - Notification plumbing

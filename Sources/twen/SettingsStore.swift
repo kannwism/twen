@@ -9,7 +9,7 @@ import TwenCore
 /// Sanity constraints, enforced by clamping on write (and on load, so hand-edited
 /// defaults can't produce a nonsensical engine):
 /// - workInterval: 5–90 min
-/// - breakLength: 10–120 s
+/// - breakLength: 10–99 s (two digits, so the menu bar countdown has a fixed width)
 /// - rampDuration: 10 s – 10 min
 /// - idlePause: 20 s – 10 min
 /// - idleReset: ≥ idlePause + 30 s
@@ -19,7 +19,7 @@ final class SettingsStore: ObservableObject {
     static let shared = SettingsStore()
 
     static let workIntervalRange: ClosedRange<TimeInterval> = (5 * 60)...(90 * 60)
-    static let breakLengthRange: ClosedRange<TimeInterval> = 10...120
+    static let breakLengthRange: ClosedRange<TimeInterval> = 10...99
     static let rampDurationRange: ClosedRange<TimeInterval> = 10...(10 * 60)
     static let idlePauseRange: ClosedRange<TimeInterval> = 20...(10 * 60)
     /// idleReset must exceed idlePause by at least this much.

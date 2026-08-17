@@ -138,36 +138,6 @@ struct SettingsView: View {
     }
 }
 
-// MARK: - Opening the Settings scene
-
-/// Opens the Settings scene from the menu bar popover. An LSUIElement app is never
-/// active, so the window needs an explicit activate to actually come forward; and
-/// on macOS 13 the scene can only be summoned via the legacy responder selector.
-struct SettingsOpenButton: View {
-    var body: some View {
-        if #available(macOS 14.0, *) {
-            ModernSettingsButton()
-        } else {
-            Button("Settings…") {
-                NSApp.activate(ignoringOtherApps: true)
-                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-            }
-        }
-    }
-}
-
-@available(macOS 14.0, *)
-private struct ModernSettingsButton: View {
-    @Environment(\.openSettings) private var openSettings
-
-    var body: some View {
-        Button("Settings…") {
-            NSApp.activate(ignoringOtherApps: true)
-            openSettings()
-        }
-    }
-}
-
 // MARK: - Hotkey recorder
 
 /// Captures the next keydown as the new global shortcut. While recording, the

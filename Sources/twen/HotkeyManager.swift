@@ -7,6 +7,10 @@ import Carbon.HIToolbox
 /// (Carbon virtual keycode and modifier flag values), written by SettingsStore.
 @MainActor
 final class HotkeyManager {
+    /// What a press does; injected by AppDelegate so this class stays decoupled
+    /// from the menu bar controller. Falls back to just starting a break.
+    var onPressed: (() -> Void)?
+
     // Mutated only on the main actor; nonisolated(unsafe) solely so the
     // nonisolated deinit can release them.
     private nonisolated(unsafe) var hotKeyRef: EventHotKeyRef?
@@ -88,9 +92,11 @@ final class HotkeyManager {
     }
 
     private func pressed() {
-        AppModel.shared.requestBreak()
-        // Surface the countdown for keyboard-only use; harmless no-op if it fails.
-        MenuBarPresenter.openPopover()
+        if let onPressed {
+            onPressed()
+        } else {
+            AppModel.shared.requestBreak()
+        }
     }
 
     // MARK: - Display
@@ -129,4 +135,52 @@ final class HotkeyManager {
         kVK_F6: "F6", kVK_F7: "F7", kVK_F8: "F8", kVK_F9: "F9", kVK_F10: "F10",
         kVK_F11: "F11", kVK_F12: "F12",
     ]
+
+    // MARK: - NSMenuItem key equivalents
+
+    /// The menu-item character for a keycode, or nil if unmappable. Lowercase by
+    /// contract — an uppercase keyEquivalent implies Shift, which belongs in the
+    /// modifier mask instead. Kept beside `keyNames` so the tables can't drift;
+    /// like `keyNames`, ANSI-layout only (see `describe`).
+    static func keyEquivalent(for keyCode: UInt32) -> String? {
+        if let special = keyEquivalentSpecials[Int(keyCode)] { return special }
+        guard let name = keyNames[Int(keyCode)], name.count == 1 else { return nil }
+        return name.lowercased()
+    }
+
+    private static let keyEquivalentSpecials: [Int: String] = [
+        kVK_Space: " ", kVK_Return: "\r", kVK_Escape: "\u{1B}", kVK_Tab: "\t",
+        kVK_Delete: "\u{8}",
+        kVK_ForwardDelete: String(UnicodeScalar(NSDeleteFunctionKey)!),
+        kVK_LeftArrow: String(UnicodeScalar(NSLeftArrowFunctionKey)!),
+        kVK_RightArrow: String(UnicodeScalar(NSRightArrowFunctionKey)!),
+        kVK_UpArrow: String(UnicodeScalar(NSUpArrowFunctionKey)!),
+        kVK_DownArrow: String(UnicodeScalar(NSDownArrowFunctionKey)!),
+        kVK_Home: String(UnicodeScalar(NSHomeFunctionKey)!),
+        kVK_End: String(UnicodeScalar(NSEndFunctionKey)!),
+        kVK_PageUp: String(UnicodeScalar(NSPageUpFunctionKey)!),
+        kVK_PageDown: String(UnicodeScalar(NSPageDownFunctionKey)!),
+        kVK_F1: String(UnicodeScalar(NSF1FunctionKey)!),
+        kVK_F2: String(UnicodeScalar(NSF2FunctionKey)!),
+        kVK_F3: String(UnicodeScalar(NSF3FunctionKey)!),
+        kVK_F4: String(UnicodeScalar(NSF4FunctionKey)!),
+        kVK_F5: String(UnicodeScalar(NSF5FunctionKey)!),
+        kVK_F6: String(UnicodeScalar(NSF6FunctionKey)!),
+        kVK_F7: String(UnicodeScalar(NSF7FunctionKey)!),
+        kVK_F8: String(UnicodeScalar(NSF8FunctionKey)!),
+        kVK_F9: String(UnicodeScalar(NSF9FunctionKey)!),
+        kVK_F10: String(UnicodeScalar(NSF10FunctionKey)!),
+        kVK_F11: String(UnicodeScalar(NSF11FunctionKey)!),
+        kVK_F12: String(UnicodeScalar(NSF12FunctionKey)!),
+    ]
+
+    /// Carbon modifier flags → the equivalent NSMenuItem modifier mask.
+    static func menuModifierMask(carbon modifiers: UInt32) -> NSEvent.ModifierFlags {
+        var mask: NSEvent.ModifierFlags = []
+        if modifiers & UInt32(cmdKey) != 0 { mask.insert(.command) }
+        if modifiers & UInt32(optionKey) != 0 { mask.insert(.option) }
+        if modifiers & UInt32(controlKey) != 0 { mask.insert(.control) }
+        if modifiers & UInt32(shiftKey) != 0 { mask.insert(.shift) }
+        return mask
+    }
 }
