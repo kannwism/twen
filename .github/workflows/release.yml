@@ -1,0 +1,70 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive version from tag
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Run tests
+        run: swift test
+
+      - name: Stamp version into Info.plist
+        run: |
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" Support/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VERSION" Support/Info.plist
+
+      - name: Build app bundle
+        run: make app
+
+      # TODO(notarization) — once a Developer ID certificate exists:
+      #   1. Import the cert into a temporary keychain here
+      #      (secrets: DEVELOPER_ID_P12, DEVELOPER_ID_P12_PASSWORD).
+      #   2. Re-sign, replacing the Makefile's ad-hoc signature:
+      #      codesign --force --options runtime --sign "Developer ID Application: <name>" build/twen.app
+      #   3. After zipping: xcrun notarytool submit "twen-$VERSION.zip" --wait
+      #      (secrets: APPLE_ID, APPLE_TEAM_ID, NOTARY_APP_PASSWORD)
+      #   4. xcrun stapler staple build/twen.app, then re-zip before the release step.
+
+      - name: Zip app
+        run: ditto -c -k --keepParent build/twen.app "twen-$VERSION.zip"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          shasum -a 256 "twen-$VERSION.zip" > "twen-$VERSION.zip.sha256"
+          gh release create "$GITHUB_REF_NAME" \
+            "twen-$VERSION.zip" "twen-$VERSION.zip.sha256" \
+            --title "twen $VERSION" \
+            --generate-notes
+
+      - name: Bump Homebrew cask
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+        run: |
+          if [ -z "$TAP_TOKEN" ]; then
+            echo "TAP_GITHUB_TOKEN secret not set; skipping cask bump." >&2
+            exit 0
+          fi
+          SHA256=$(shasum -a 256 "twen-$VERSION.zip" | cut -d' ' -f1)
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/kannwism/homebrew-tap.git" tap
+          cd tap
+          sed -i '' \
+            -e "s/^  version \".*\"/  version \"$VERSION\"/" \
+            -e "s/^  sha256 \".*\"/  sha256 \"$SHA256\"/" \
+            Casks/twen.rb
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -am "twen $VERSION"
+          git push
