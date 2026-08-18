@@ -87,20 +87,43 @@ public struct TwenEngine: Sendable {
     private var lastTick: Date?
     private var lockedAt: Date?
     private var wasSuppressed = false
+    /// When the display is (or will be) back at full color, derived from the effects
+    /// this engine has emitted: a restore ramp lands `over` seconds after it was issued;
+    /// a ramp toward gray or a hold means no restore is scheduled (nil). Restores gate
+    /// on this rather than `rampProgress`, which is bookkeeping and reads 0 while a
+    /// visual is still desaturated (mid-break restore, or the tick that starts a ramp).
+    private var fullColorAt: Date? = .distantPast
 
     public init(config: EngineConfig = EngineConfig()) {
         self.config = config
     }
 
     public mutating func handle(_ event: EngineEvent, at now: Date) -> [EngineEffect] {
+        let effects: [EngineEffect]
         switch event {
-        case let .tick(idle, suppressed): return tick(now: now, idle: idle, suppressed: suppressed)
-        case .breakRequested: return startBreak()
-        case .lockOrSleep: return locked(at: now)
-        case .unlock: return unlocked(at: now)
-        case let .snoozeRequested(until): return snooze(until: until)
-        case .snoozeCancelled: return cancelSnooze()
+        case let .tick(idle, suppressed): effects = tick(now: now, idle: idle, suppressed: suppressed)
+        case .breakRequested: effects = startBreak(at: now)
+        case .lockOrSleep: effects = locked(at: now)
+        case .unlock: effects = unlocked(at: now)
+        case let .snoozeRequested(until): effects = snooze(until: until, at: now)
+        case .snoozeCancelled: effects = cancelSnooze()
         }
+        for effect in effects {
+            switch effect {
+            case let .ramp(toSaturation, over):
+                fullColorAt = toSaturation >= 1 ? now.addingTimeInterval(over) : nil
+            case .hold:
+                fullColorAt = nil
+            }
+        }
+        return effects
+    }
+
+    /// True unless full color is already scheduled to land within `within` seconds —
+    /// used to skip a restore that would only slow down one already in flight.
+    private func desaturated(at now: Date, beyond within: TimeInterval) -> Bool {
+        guard let fullColorAt else { return true }
+        return fullColorAt.timeIntervalSince(now) > within
     }
 
     // MARK: - Tick
@@ -179,20 +202,21 @@ public struct TwenEngine: Sendable {
 
     // MARK: - Discrete events
 
-    private mutating func startBreak() -> [EngineEffect] {
+    private mutating func startBreak(at now: Date) -> [EngineEffect] {
         guard phase != .breakRunning else { return [] }
         phase = .breakRunning
         breakRemaining = config.breakLength
-        let wasDesaturated = rampProgress > 0
+        let wasDesaturated = desaturated(at: now, beyond: config.breakLength)
         rampProgress = 0
         return wasDesaturated ? [.ramp(toSaturation: 1, over: config.breakLength)] : []
     }
 
     /// Pausing means "stop nagging me": any gray drains away now, and the work
     /// timer starts fresh whenever the snooze ends. Valid from every phase.
-    private mutating func snooze(until: Date?) -> [EngineEffect] {
+    private mutating func snooze(until: Date?, at now: Date) -> [EngineEffect] {
         let effects: [EngineEffect] =
-            rampProgress > 0 ? [.ramp(toSaturation: 1, over: config.satisfiedRestore)] : []
+            desaturated(at: now, beyond: config.satisfiedRestore)
+                ? [.ramp(toSaturation: 1, over: config.satisfiedRestore)] : []
         accrued = 0
         rampProgress = 0
         breakRemaining = 0
