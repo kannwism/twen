@@ -15,7 +15,9 @@ Existing apps are heavy or aggressive. twen nudges instead of blocking.
 
 ## Non-goals
 
-- No accounts, no network, no analytics, no telemetry.
+- No accounts, no analytics, no telemetry. The only network use is a daily
+  version check against GitHub Releases (on by default, off in Settings);
+  nothing is sent beyond the request itself and nothing is downloaded.
 - No blocking overlays, forced breaks, or streak gamification.
 - No App Store (unsandboxed by design); no cross-platform.
 

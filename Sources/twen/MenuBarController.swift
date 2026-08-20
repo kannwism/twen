@@ -22,6 +22,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     let breakItem = NSMenuItem()
     let pauseItem = NSMenuItem()
     let resumeItem = NSMenuItem()
+    let updateItem = NSMenuItem()
     let settingsItem = NSMenuItem()
     let quitItem = NSMenuItem()
 
@@ -70,6 +71,11 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         resumeItem.target = self
         resumeItem.action = #selector(resume)
 
+        // Hidden until UpdateChecker surfaces a newer release; title set in refresh().
+        updateItem.isHidden = true
+        updateItem.target = self
+        updateItem.action = #selector(openReleasePage)
+
         settingsItem.title = "Settings…"
         settingsItem.target = self
         settingsItem.action = #selector(openSettings)
@@ -86,6 +92,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(pauseItem)
         menu.addItem(resumeItem)
         menu.addItem(.separator())
+        menu.addItem(updateItem)
         menu.addItem(settingsItem)
         menu.addItem(quitItem)
     }
@@ -124,6 +131,12 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         let snoozed = engine.phase == .snoozed
         pauseItem.isHidden = snoozed
         resumeItem.isHidden = !snoozed
+        if let update = model.updateChecker.available {
+            updateItem.title = "Update available: \(update.version)…"
+            updateItem.isHidden = false
+        } else {
+            updateItem.isHidden = true
+        }
         applyBreakKeyEquivalent()
     }
 
@@ -239,6 +252,13 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     @objc private func pauseUntilTomorrow() { model.pauseUntilTomorrow() }
     @objc private func resume() { model.resume() }
     @objc private func quit() { NSApp.terminate(nil) }
+
+    /// Deliberately just a link: brew-installed copies should update via brew, so
+    /// the app never downloads anything itself — the release page explains both.
+    @objc private func openReleasePage() {
+        guard let url = model.updateChecker.available?.url else { return }
+        NSWorkspace.shared.open(url)
+    }
 
     /// Internal (not private): --probe-settings invokes it directly to verify
     /// the EnvironmentValues bridge still works on the running OS.
