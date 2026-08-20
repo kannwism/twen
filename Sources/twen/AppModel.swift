@@ -33,6 +33,9 @@ final class AppModel: ObservableObject {
     /// the shortcut live. Callback behavior is unchanged: pressed → requestBreak().
     let hotkey = HotkeyManager()
 
+    /// Owned here so the settings toggle can start/stop it live.
+    let updateChecker = UpdateChecker()
+
     private let idleSource: any IdleSource
     private let suppression: any SuppressionChecking
     private let desaturator: any Desaturating
@@ -65,6 +68,8 @@ final class AppModel: ObservableObject {
     func start() {
         guard pollTask == nil else { return }
         print("twen: started, phase=\(engine.phase.rawValue)")
+
+        updateChecker.start()
 
         pollTask = Task { [weak self] in
             while !Task.isCancelled {

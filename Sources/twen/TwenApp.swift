@@ -42,6 +42,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             runSettingsOpenProbe()
         } else if CommandLine.arguments.contains("--probe-countdown") {
             runCountdownProbe()
+        } else if CommandLine.arguments.contains("--probe-update") {
+            runUpdateProbe()
         } else {
             AppModel.shared.start()
             let hotkey = AppModel.shared.hotkey
@@ -83,7 +85,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.refresh()
         expect("status button exists", menuBar.statusItem.button != nil)
         expect("button has image", menuBar.statusItem.button?.image != nil)
-        expect("item count", menuBar.menu.items.count == 9)
+        expect("item count", menuBar.menu.items.count == 10)
+        expect("update item hidden without an update", menuBar.updateItem.isHidden)
         expect("status line disabled", !menuBar.statusLine.isEnabled)
         expect("status line has text", !menuBar.statusLine.title.isEmpty)
         expect("break item enabled while waiting", menuBar.breakItem.isEnabled)
@@ -188,6 +191,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         suite.removePersistentDomain(forName: suiteName)
         print("settings: exercise \(failures == 0 ? "passed" : "FAILED (\(failures))")")
         exit(failures == 0 ? 0 : 1)
+    }
+
+    /// End-to-end update-check probe: a real GitHub API fetch pretending to run
+    /// version 0.0.1 (so any published release counts as newer), then the menu
+    /// path via the probe surface hook. Needs network — a manual check, not CI.
+    private func runUpdateProbe() {
+        guard let menuBar else { exit(1) }
+        let checker = UpdateChecker(currentVersionString: "0.0.1")
+        Task {
+            await checker.checkNow()
+            var failures = 0
+            func expect(_ label: String, _ ok: Bool) {
+                if !ok { failures += 1 }
+                print("update: \(label) \(ok ? "ok" : "FAIL")")
+            }
+            expect("fetch found an update", checker.available != nil)
+            if let update = checker.available {
+                expect("version parses", AppVersion(update.version) != nil)
+                expect("release URL is on github", update.url.host == "github.com")
+                AppModel.shared.updateChecker.surface(update)
+                menuBar.refresh()
+                expect("menu item visible", !menuBar.updateItem.isHidden)
+                expect("menu item title has version", menuBar.updateItem.title.contains(update.version))
+                expect("menu item enabled", menuBar.updateItem.isEnabled)
+            }
+            print("update: probe \(failures == 0 ? "passed" : "FAILED (\(failures))")")
+            exit(failures == 0 ? 0 : 1)
+        }
     }
 
     /// Exercises the visual path end to end without the timer: ramp down, hold
