@@ -251,6 +251,53 @@ private struct Sim {
     #expect(sim.engine.rampProgress == 0)
 }
 
+@Test func snoozeDuringBreakRestoreAcceleratesColorReturn() {
+    var sim = Sim()
+    sim.workToGray()
+    sim.send(.breakRequested) // color returns slowly, over the whole 10s break
+    sim.tick(idle: 1) // 2s in: still visibly gray, but rampProgress is already 0
+    sim.send(.snoozeRequested(until: sim.now + 100))
+    #expect(sim.lastEffects.contains(.ramp(toSaturation: 1, over: 5)))
+    #expect(sim.engine.phase == .snoozed)
+}
+
+@Test func snoozeOnRampStartTickStillRestoresColor() {
+    var sim = Sim()
+    sim.work(102) // the tick that crosses workInterval emits the ramp effect…
+    #expect(sim.engine.phase == .ramping)
+    #expect(sim.engine.rampProgress == 0) // …but progress only advances next tick
+    sim.send(.snoozeRequested(until: sim.now + 100))
+    #expect(sim.lastEffects.contains(.ramp(toSaturation: 1, over: 5)))
+}
+
+@Test func breakOnRampStartTickStillRestoresColor() {
+    var sim = Sim()
+    sim.work(102)
+    #expect(sim.engine.rampProgress == 0)
+    sim.send(.breakRequested)
+    #expect(sim.lastEffects.contains(.ramp(toSaturation: 1, over: 10)))
+}
+
+@Test func snoozeDuringFullColorBreakEmitsNothing() {
+    var sim = Sim()
+    sim.work(30)
+    sim.send(.breakRequested) // break started at full color; nothing to restore
+    sim.tick(idle: 1)
+    sim.send(.snoozeRequested(until: sim.now + 100))
+    #expect(sim.lastEffects.isEmpty)
+    #expect(sim.engine.phase == .snoozed)
+}
+
+@Test func snoozeSkipsRestoreAlreadyLandingSooner() {
+    var sim = Sim()
+    sim.workToGray()
+    sim.send(.breakRequested)
+    sim.work(8) // break restore lands in 2s — sooner than satisfiedRestore would
+    sim.send(.snoozeRequested(until: sim.now + 100))
+    #expect(sim.lastEffects.isEmpty)
+    #expect(sim.engine.phase == .snoozed)
+}
+
 @Test func activeTicksBeforeDeadlineStaySnoozedAndAccrueNothing() {
     var sim = Sim()
     sim.work(30)
