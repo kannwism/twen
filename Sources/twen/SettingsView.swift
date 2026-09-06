@@ -109,6 +109,7 @@ struct SettingsView: View {
                     .foregroundStyle(.red)
             }
             Toggle("Pause while on battery", isOn: $store.pauseOnBattery)
+            Toggle("Check for updates daily", isOn: $store.checkForUpdates)
         }
     }
 

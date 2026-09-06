@@ -131,6 +131,16 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(pauseOnBattery, forKey: "pauseOnBattery") }
     }
 
+    /// Daily GitHub Releases version check — the app's only network use, so it
+    /// must be defeatable. Default on; toggling takes effect immediately.
+    @Published var checkForUpdates: Bool {
+        didSet {
+            defaults.set(checkForUpdates, forKey: "checkForUpdates")
+            let checker = AppModel.shared.updateChecker
+            checkForUpdates ? checker.start() : checker.stop()
+        }
+    }
+
     // MARK: - Init
 
     init(defaults: UserDefaults = .standard) {
@@ -153,6 +163,7 @@ final class SettingsStore: ObservableObject {
         hotkeyKeyCode = defaults.object(forKey: "hotkeyKeyCode") as? Int ?? kVK_ANSI_B
         hotkeyModifiers = defaults.object(forKey: "hotkeyModifiers") as? Int ?? (cmdKey | optionKey)
         pauseOnBattery = defaults.bool(forKey: "pauseOnBattery")
+        checkForUpdates = defaults.object(forKey: "checkForUpdates") as? Bool ?? true
     }
 
     // MARK: - Plumbing
