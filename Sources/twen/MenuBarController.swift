@@ -38,7 +38,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         // is a retain cycle. Deliberate: this object lives as long as the app.
         statusItem.menu = menu
         observeModel()
-        updateButton(countdown: model.menuCountdown, phase: model.engine.phase)
+        updateButton(countdown: model.menuCountdown, engine: model.engine)
         refresh()
     }
 
@@ -104,7 +104,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         model.$menuCountdown.combineLatest(model.$engine)
             .sink { countdown, engine in
                 MainActor.assumeIsolated { [weak self] in
-                    self?.updateButton(countdown: countdown, phase: engine.phase)
+                    self?.updateButton(countdown: countdown, engine: engine)
                 }
             }
             .store(in: &cancellables)
@@ -257,30 +257,51 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     // MARK: - Status button icon
 
-    private func updateButton(countdown: String?, phase: TwenPhase) {
+    private func updateButton(countdown: String?, engine: TwenEngine) {
         guard let button = statusItem.button else { return }
-        // Image only, never image + title: the fixed canvas is what keeps the
-        // status item from changing width mid-countdown.
+        // Image only, never image + title: every image is drawn on a canvas at
+        // least MenuBarIcon.pointSize wide, so the status item never changes width.
+        let image: NSImage?
         if let countdown {
-            button.image = Self.countdownImage(countdown)
+            image = Self.countdownImage(countdown)
+        } else if let progress = Self.eyeProgress(engine) {
+            image = MenuBarIcon.eye(progress: progress)
         } else {
-            button.image = NSImage(systemSymbolName: Self.iconName(for: phase),
-                                   accessibilityDescription: "twen")
+            image = NSImage(systemSymbolName: Self.iconName(for: engine.phase),
+                            accessibilityDescription: "twen")
+        }
+        // The eye is cached per fill level; skip the redraw when nothing changed.
+        if button.image !== image { button.image = image }
+    }
+
+    /// How full the eye is — the share of the work interval consumed — or nil
+    /// for the phases the eye doesn't express yet (break states, snooze), which
+    /// keep their SF Symbols until the design covers them.
+    private static func eyeProgress(_ engine: TwenEngine) -> Double? {
+        switch engine.phase {
+        case .waiting, .working, .paused:
+            let interval = engine.config.workInterval
+            return interval > 0 ? min(1, engine.accrued / interval) : 0
+        case .ramping, .gray:
+            return 1
+        case .breakRunning, .breakSatisfied, .snoozed:
+            return nil
         }
     }
 
     private static func iconName(for phase: TwenPhase) -> String {
         switch phase {
-        case .waiting, .paused: "eye.slash"
-        case .working: "eye"
-        case .ramping, .gray: "eye.trianglebadge.exclamationmark"
         case .breakRunning: "timer"
         case .breakSatisfied: "checkmark.circle"
         case .snoozed: "zzz"
+        // Unreachable: eyeProgress covers these. Kept exhaustive so a new phase
+        // is a compile error here rather than a silent fallback.
+        case .waiting, .working, .paused, .ramping, .gray: "eye"
         }
     }
 
-    /// The two digits rendered at menu bar text size on a canvas sized for "00".
+    /// The two digits rendered at menu bar text size on a canvas sized for "00",
+    /// and never narrower than the eye so the phase change doesn't shift the bar.
     /// Monospaced digits make every pair the same width, but the fixed canvas is
     /// what guarantees it. Template image, so the system tints it like any icon.
     private static func countdownImage(_ text: String) -> NSImage {
@@ -289,7 +310,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             .foregroundColor: NSColor.black,
         ]
         let canvas = ("00" as NSString).size(withAttributes: attributes)
-        let size = NSSize(width: ceil(canvas.width), height: ceil(canvas.height))
+        let size = NSSize(width: max(ceil(canvas.width), MenuBarIcon.pointSize),
+                          height: ceil(canvas.height))
         let image = NSImage(size: size, flipped: false) { rect in
             let textSize = (text as NSString).size(withAttributes: attributes)
             (text as NSString).draw(

@@ -83,6 +83,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.refresh()
         expect("status button exists", menuBar.statusItem.button != nil)
         expect("button has image", menuBar.statusItem.button?.image != nil)
+        // Waiting phase → the eye at level 0. Rasterize it the way the bar would
+        // and check the geometry, not just that an image object exists.
+        if let icon = menuBar.statusItem.button?.image {
+            expect("icon is a template", icon.isTemplate)
+            expect("icon canvas is \(Int(MenuBarIcon.pointSize))pt square",
+                   icon.size == NSSize(width: MenuBarIcon.pointSize, height: MenuBarIcon.pointSize))
+            let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 36, pixelsHigh: 36,
+                                       bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+                                       isPlanar: false, colorSpaceName: .deviceRGB,
+                                       bytesPerRow: 0, bitsPerPixel: 0)!
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+            icon.draw(in: NSRect(x: 0, y: 0, width: 36, height: 36))
+            NSGraphicsContext.restoreGraphicsState()
+            let irisAlpha = rep.colorAt(x: 18, y: 18)?.alphaComponent ?? 0
+            let lensAlpha = rep.colorAt(x: 18, y: 30)?.alphaComponent ?? 1 // low in the lens; bitmap y is down
+            expect("empty eye: iris opaque", irisAlpha > 0.8)
+            expect("empty eye: lens clear", lensAlpha < 0.1)
+        }
         expect("item count", menuBar.menu.items.count == 9)
         expect("status line disabled", !menuBar.statusLine.isEnabled)
         expect("status line has text", !menuBar.statusLine.title.isEmpty)
