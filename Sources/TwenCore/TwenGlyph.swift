@@ -2,7 +2,7 @@ import CoreGraphics
 import Foundation
 
 /// The twen mark: two stylised Xs (XX = 20 in Roman numerals) whose gap forms a
-/// vertical eye. Fitted from logo/twen_logo_v2.svg — every outline in that file
+/// vertical eye. Fitted from logo/twen.svg — every outline in that file
 /// is an exact circular arc, so the mark is a handful of circles in a unit
 /// square (y down). Everything sits on a 12-unit grid: arm width, lens-to-arm
 /// gap and iris radius are all 1/12, i.e. 1.5pt at the 18pt menu bar size.
