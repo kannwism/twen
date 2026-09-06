@@ -3,7 +3,9 @@ import AppKit
 // Renders the app icon set from the same TwenGlyph geometry the menu bar draws,
 // so the two can never drift apart and no image files live in the repo. Apple's
 // macOS icon grid: an 824/1024 rounded square (corner radius ≈ 22.4% of its
-// side) in white, with the empty-eye mark in black at 50% of the square.
+// side) in white, with the mark in black at 50% of the square, its eye half
+// filled — the time line cuts straight through the iris, so the icon shows the
+// inversion that makes the menu bar animation what it is.
 //
 // Built by `make app`:  swiftc Support/AppIcon.swift Sources/TwenCore/TwenGlyph.swift
 // Usage:                appicon <iconset directory>
@@ -45,7 +47,7 @@ func render(px: Int) -> Data {
     ctx.saveGState()
     ctx.translateBy(x: (canvas - mark) / 2, y: (canvas + mark) / 2)
     ctx.scaleBy(x: mark, y: -mark)
-    TwenGlyph.draw(fillLineY: TwenGlyph.fillLineY(progress: 0), in: ctx)
+    TwenGlyph.draw(fillLineY: TwenGlyph.fillLineY(progress: 0.5), in: ctx)
     ctx.restoreGState()
 
     NSGraphicsContext.restoreGraphicsState()
