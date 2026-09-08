@@ -86,6 +86,9 @@ public struct TwenEngine: Sendable {
 
     private var lastTick: Date?
     private var lockedAt: Date?
+    /// When the current snooze began; drives the idleReset-style clearing of
+    /// accrued time while paused.
+    private var snoozedAt: Date?
     private var wasSuppressed = false
     /// When the display is (or will be) back at full color, derived from the effects
     /// this engine has emitted: a restore ramp lands `over` seconds after it was issued;
@@ -106,7 +109,7 @@ public struct TwenEngine: Sendable {
         case .lockOrSleep: effects = locked(at: now)
         case .unlock: effects = unlocked(at: now)
         case let .snoozeRequested(until): effects = snooze(until: until, at: now)
-        case .snoozeCancelled: effects = cancelSnooze()
+        case .snoozeCancelled: effects = cancelSnooze(at: now)
         }
         for effect in effects {
             switch effect {
@@ -192,9 +195,13 @@ public struct TwenEngine: Sendable {
 
         case .snoozed:
             // Idle and suppression are irrelevant while snoozed: no accrual, no effects.
+            // Accrued time carried into the pause survives only as long as being
+            // away would: past idleReset it clears, and the eye shows it emptying.
+            clearAccruedIfSnoozedLong(at: now)
             if let until = snoozeUntil, now >= until {
                 snoozeUntil = nil
-                phase = .waiting // fresh start; next activity begins accrual
+                snoozedAt = nil
+                phase = .waiting // next activity resumes (or begins) accrual
             }
         }
         return effects
@@ -211,25 +218,43 @@ public struct TwenEngine: Sendable {
         return wasDesaturated ? [.ramp(toSaturation: 1, over: config.breakLength)] : []
     }
 
-    /// Pausing means "stop nagging me": any gray drains away now, and the work
-    /// timer starts fresh whenever the snooze ends. Valid from every phase.
+    /// Pausing means "stop nagging me": any gray drains away now. Valid from
+    /// every phase. A pause taken mid-interval keeps the accrued work time, so
+    /// resuming a few minutes later continues where it left off (and the menu bar
+    /// eye can show that) — unless the pause outlasts idleReset, which clears it
+    /// just as being away that long would. A pause taken once a break is due
+    /// dismisses the nag: the timer starts fresh whenever the snooze ends.
     private mutating func snooze(until: Date?, at now: Date) -> [EngineEffect] {
         let effects: [EngineEffect] =
             desaturated(at: now, beyond: config.satisfiedRestore)
                 ? [.ramp(toSaturation: 1, over: config.satisfiedRestore)] : []
-        accrued = 0
+        switch phase {
+        case .waiting, .working, .paused, .snoozed:
+            break // keep accrued
+        case .ramping, .gray, .breakRunning, .breakSatisfied:
+            accrued = 0
+        }
         rampProgress = 0
         breakRemaining = 0
         snoozeUntil = until
+        if snoozedAt == nil { snoozedAt = now } // re-snoozing doesn't restart the clock
         phase = .snoozed
         return effects
     }
 
-    private mutating func cancelSnooze() -> [EngineEffect] {
+    private mutating func cancelSnooze(at now: Date) -> [EngineEffect] {
         guard phase == .snoozed else { return [] }
+        clearAccruedIfSnoozedLong(at: now)
         snoozeUntil = nil
+        snoozedAt = nil
         phase = .waiting
         return []
+    }
+
+    private mutating func clearAccruedIfSnoozedLong(at now: Date) {
+        if let snoozedAt, now.timeIntervalSince(snoozedAt) >= config.idleReset {
+            accrued = 0
+        }
     }
 
     private mutating func locked(at now: Date) -> [EngineEffect] {

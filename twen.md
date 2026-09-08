@@ -29,6 +29,7 @@ Existing apps are heavy or aggressive. twen nudges instead of blocking.
 - Idle ≥1 min while desaturated → break satisfied (separate threshold from the reset: a minute genuinely away rests the eyes).
 - Screen lock / sleep / user switch → treated as idle from that moment, same thresholds: unlock within 3 min just pauses accrual, longer resets; ≥1 min while desaturated satisfies the break.
 - Timer starts from first real activity, not app launch.
+- Pause (snooze) mid-interval keeps the accrued time — the menu bar eye keeps showing it — so a short pause resumes where it left off; a pause longer than the reset threshold clears it like being away would. Pausing once a break is due dismisses the nag and starts fresh.
 
 ## Things to poll
 

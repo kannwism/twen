@@ -7,13 +7,13 @@ import Testing
 struct TwenGlyphTests {
     static let px = 36
 
-    static func render(progress: Double) -> [UInt8] {
+    static func render(progress: Double, lid: Double = 1, iris: TwenGlyph.Iris = .dot) -> [UInt8] {
         let ctx = CGContext(data: nil, width: px, height: px, bitsPerComponent: 8, bytesPerRow: px * 4,
                             space: CGColorSpaceCreateDeviceRGB(),
                             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
         ctx.translateBy(x: 0, y: CGFloat(px))
         ctx.scaleBy(x: CGFloat(px), y: -CGFloat(px))
-        TwenGlyph.draw(fillLineY: TwenGlyph.fillLineY(progress: progress), in: ctx)
+        TwenGlyph.draw(fillLineY: TwenGlyph.fillLineY(progress: progress), lid: lid, iris: iris, in: ctx)
         let data = ctx.data!.assumingMemoryBound(to: UInt8.self)
         // Keep only the alpha byte of each RGBA pixel.
         return (0..<(px * px)).map { data[$0 * 4 + 3] }
@@ -70,6 +70,52 @@ struct TwenGlyphTests {
             #expect(ink > last, "step \(step)")
             last = ink
         }
+    }
+
+    @Test func closedLidIsASlitAndHidesTheIris() {
+        let p = Self.render(progress: 1, lid: TwenGlyph.lidClosed)
+        #expect(Self.alpha(p, 0.5, 0.5) > 200)        // slit is solid where the iris hole would be
+        #expect(Self.alpha(p, 0.5, 0.40) < 30)        // lens interior above the slit is gone
+        #expect(Self.alpha(p, 0.5, 0.60) < 30)
+        #expect(Self.alpha(p, arm.0, arm.1) > 200)    // frame untouched
+    }
+
+    @Test func halfLidKeepsARoundIrisHole() {
+        let p = Self.render(progress: 1, lid: 0.5)
+        #expect(Self.alpha(p, 0.5, 0.5) < 30)         // iris hole
+        #expect(Self.alpha(p, 0.5, 0.35) > 200)       // still inside the squeezed lens
+        #expect(Self.alpha(p, 0.5, 0.20) < 30)        // outside it now
+    }
+
+    @Test func lidClosesMonotonically() {
+        // Ink shrinks as the lid comes down while the iris hole is visible …
+        var last = Int.max
+        for lid in stride(from: 1.0, through: 0.3, by: -0.1) {
+            let ink = Self.ink(Self.render(progress: 1, lid: lid))
+            #expect(ink < last, "lid \(lid)")
+            last = ink
+        }
+        // … and the closed slit, though solid, is still the least ink of all.
+        #expect(Self.ink(Self.render(progress: 1, lid: TwenGlyph.lidClosed)) < last)
+    }
+
+    @Test func pauseIrisInvertsWithTheFill() {
+        let bar = (0.43, 0.5), gap = (0.5, 0.5)
+        let empty = Self.render(progress: 0, iris: .pause)
+        #expect(Self.alpha(empty, bar.0, bar.1) > 200)   // solid bars
+        #expect(Self.alpha(empty, gap.0, gap.1) < 30)
+        let full = Self.render(progress: 1, iris: .pause)
+        #expect(Self.alpha(full, bar.0, bar.1) < 30)     // bars become holes
+        #expect(Self.alpha(full, gap.0, gap.1) > 200)
+        let half = Self.render(progress: 0.5, iris: .pause)
+        #expect(Self.alpha(half, bar.0, 0.44) > 200)     // above the line: ink
+        #expect(Self.alpha(half, bar.0, 0.56) < 30)      // below the line: hole
+    }
+
+    @Test func noIrisLeavesTheLensPlain() {
+        let p = Self.render(progress: 0, iris: .none)
+        #expect(Self.alpha(p, 0.5, 0.5) < 30)
+        #expect(Self.ink(Self.render(progress: 1, iris: .none)) > Self.ink(Self.render(progress: 1)))
     }
 
     @Test func fillLineSpansTheLensAndClamps() {
