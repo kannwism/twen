@@ -129,6 +129,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         expect("stopped eye: ring hollow at its centre above the line", alpha(stopped, x: 18, y: 17) < 0.1)
         expect("stopped eye: ring is a hole below the line", alpha(stopped, x: 15, y: 19) < 0.1)
         expect("stopped eye: centre solid below the line", alpha(stopped, x: 18, y: 19) > 0.8)
+        // The check is a hole in the (full) lens: it must remove ink from the iris
+        // area and leave the rest of the lens solid.
+        let checked = EyeState(fill: 1, iris: .check)
+        let plain = EyeState(fill: 1, iris: .none)
+        var irisArea = 0.0, checkArea = 0.0
+        for y in 13...23 { for x in 13...23 {
+            irisArea += alpha(plain, x: x, y: y); checkArea += alpha(checked, x: x, y: y)
+        } }
+        expect("checked eye: check punched out of the full lens", irisArea - checkArea > 15)
+        expect("checked eye: lens solid outside the iris", alpha(checked, x: 18, y: 28) > 0.8)
         expect("distinct states get distinct images",
                MenuBarIcon.image(for: closed) !== MenuBarIcon.image(for: pausedHalf))
         expect("same state hits the cache",
