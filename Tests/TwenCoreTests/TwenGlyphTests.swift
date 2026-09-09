@@ -112,6 +112,19 @@ struct TwenGlyphTests {
         #expect(Self.alpha(half, bar.0, 0.56) < 30)      // below the line: hole
     }
 
+    @Test func stopIrisIsAHollowSquareThatInvertsWithTheFill() {
+        let ring = (0.5 - 1.5 / 18, 0.5), centre = (0.5, 0.5) // left stroke, 4/18 square
+        let empty = Self.render(progress: 0, iris: .stop)
+        #expect(Self.alpha(empty, ring.0, ring.1) > 200)     // stroke is ink
+        #expect(Self.alpha(empty, centre.0, centre.1) < 30)  // hollow
+        let full = Self.render(progress: 1, iris: .stop)
+        #expect(Self.alpha(full, ring.0, ring.1) < 30)       // stroke becomes a hole
+        #expect(Self.alpha(full, centre.0, centre.1) > 200)  // centre becomes ink
+        let half = Self.render(progress: 0.5, iris: .stop)
+        #expect(Self.alpha(half, ring.0, 0.42) > 200)        // above the line: ink
+        #expect(Self.alpha(half, ring.0, 0.58) < 30)         // below the line: hole
+    }
+
     @Test func noIrisLeavesTheLensPlain() {
         let p = Self.render(progress: 0, iris: .none)
         #expect(Self.alpha(p, 0.5, 0.5) < 30)

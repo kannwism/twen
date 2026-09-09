@@ -57,7 +57,7 @@ Don't start or advance desaturation when:
 - Screen sharing or recording is active.
 - Optional: Low Power Mode / on battery.
 
-Suppression pauses the ramp; it does not consume the break.
+Suppression cancels the ramp: colour returns within 2s and the timer waits, full, for the signal to clear — then the ramp starts over from the top. It does not consume the break. The menu bar iris becomes a hollow square while a signal is active.
 
 ## Desaturation implementation
 

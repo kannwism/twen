@@ -126,25 +126,44 @@ private struct Sim {
     #expect(sim.engine.phase == .ramping)
 }
 
-@Test func suppressionPausesRampThenResumesWithRemainingDuration() {
+@Test func suppressionMidRampRestoresColorAndRestartsTheRampLater() {
     var sim = Sim()
     sim.workToRamp()
     sim.work(8) // partway through the 20s ramp
-    let progress = sim.engine.rampProgress
-    #expect(progress > 0 && progress < 1)
+    #expect(sim.engine.rampProgress > 0)
 
-    sim.work(10, suppressed: true)
-    #expect(sim.engine.rampProgress == progress) // frozen
-    #expect(sim.collected.contains(.hold(atSaturation: 1 - progress)))
+    sim.work(2, suppressed: true) // a call starts
+    #expect(sim.lastEffects == [.ramp(toSaturation: 1, over: 2)])
+    #expect(sim.engine.phase == .working) // full and waiting, not gray
+    #expect(sim.engine.rampProgress == 0)
+    #expect(sim.engine.accrued >= 100)
 
     sim.collected = []
+    sim.work(10, suppressed: true) // still on the call: nothing more happens
+    #expect(sim.engine.phase == .working)
+    #expect(sim.collected.isEmpty)
+
+    sim.work(2, suppressed: false) // call ends: the ramp starts over, full length
+    #expect(sim.engine.phase == .ramping)
+    #expect(sim.lastEffects == [.ramp(toSaturation: 0, over: 20)])
+}
+
+@Test func suppressionWhileGrayRestoresColor() {
+    var sim = Sim()
+    sim.workToGray()
+    sim.work(2, suppressed: true)
+    #expect(sim.lastEffects == [.ramp(toSaturation: 1, over: 2)])
+    #expect(sim.engine.phase == .working)
+    #expect(sim.engine.rampProgress == 0)
     sim.work(2, suppressed: false)
-    guard case let .ramp(to, over)? = sim.collected.first else {
-        Issue.record("expected resume ramp effect")
-        return
-    }
-    #expect(to == 0)
-    #expect(abs(over - 20 * (1 - progress)) < 0.001)
+    #expect(sim.engine.phase == .ramping)
+}
+
+@Test func idleWhileGrayStillSatisfiesTheBreakUnderSuppression() {
+    var sim = Sim()
+    sim.workToGray()
+    sim.tick(idle: 30, suppressed: true) // a minute-equivalent away wins over the signal
+    #expect(sim.engine.phase == .breakSatisfied)
 }
 
 // MARK: - Breaks

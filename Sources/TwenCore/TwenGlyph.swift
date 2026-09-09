@@ -14,10 +14,11 @@ import Foundation
 /// - `lid`: squeezes the lens vertically about its centre, 1 = open, `lidClosed`
 ///   = a slit. The iris stays round and disappears once the lid no longer fits
 ///   around it, the way an eyelid covers a pupil.
-/// - `iris`: a round pupil, a tiny pause sign (twen is paused), or none.
+/// - `iris`: a round pupil, a tiny pause sign (twen is paused), a hollow square
+///   (twen is stopped by a suppression signal), or none.
 public enum TwenGlyph {
     public enum Iris: Hashable, Sendable {
-        case dot, pause, none
+        case dot, pause, stop, none
     }
 
     /// Lens: intersection of two disks mirrored around x = 0.5.
@@ -36,6 +37,11 @@ public enum TwenGlyph {
     /// iris's footprint, slightly taller than wide so it reads as ⏸ not ▪▪.
     static let pauseBarWidth = 1.0 / 18.0
     static let pauseBarHeight = 4.0 / 18.0
+    /// Stop sign: a hollow square on the same 18-grid as the pause bars — 4/18
+    /// outside, 1/18 stroke — so both read at one weight. The even-odd fill
+    /// inverts it below the fill line into a square hole with a solid centre.
+    static let stopOuter = 4.0 / 18.0
+    static let stopStroke = 1.0 / 18.0
 
     /// Where the two lens arcs meet at the top; the bottom tip is `1 - lensTop`.
     public static let lensTop: Double = {
@@ -101,6 +107,10 @@ public enum TwenGlyph {
             let w = pauseBarWidth, h = pauseBarHeight
             ctx.addRect(CGRect(x: 0.5 - 1.5 * w, y: 0.5 - h / 2, width: w, height: h))
             ctx.addRect(CGRect(x: 0.5 + 0.5 * w, y: 0.5 - h / 2, width: w, height: h))
+        case .stop where lensHeight >= stopOuter * 1.15:
+            let outer = CGRect(x: 0.5 - stopOuter / 2, y: 0.5 - stopOuter / 2, width: stopOuter, height: stopOuter)
+            ctx.addRect(outer)
+            ctx.addRect(outer.insetBy(dx: stopStroke, dy: stopStroke))
         default:
             break // lid too far down to show a pupil, or none requested
         }

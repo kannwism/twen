@@ -39,7 +39,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         // is a retain cycle. Deliberate: this object lives as long as the app.
         statusItem.menu = menu
         observeModel()
-        updateButton(countdown: model.menuCountdown, engine: model.engine)
+        updateButton(countdown: model.menuCountdown, engine: model.engine, suppressed: model.isSuppressed)
         refresh()
     }
 
@@ -108,10 +108,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     /// Direct synchronous sinks — no .receive(on: RunLoop.main), which enqueues
     /// in .default mode and would freeze exactly while a menu is tracking.
     private func observeModel() {
-        model.$menuCountdown.combineLatest(model.$engine)
-            .sink { countdown, engine in
+        model.$menuCountdown.combineLatest(model.$engine, model.$isSuppressed)
+            .sink { countdown, engine, suppressed in
                 MainActor.assumeIsolated { [weak self] in
-                    self?.updateButton(countdown: countdown, engine: engine)
+                    self?.updateButton(countdown: countdown, engine: engine, suppressed: suppressed)
                 }
             }
             .store(in: &cancellables)
@@ -277,14 +277,14 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     // MARK: - Status button icon
 
-    private func updateButton(countdown: String?, engine: TwenEngine) {
+    private func updateButton(countdown: String?, engine: TwenEngine, suppressed: Bool) {
         guard let button = statusItem.button else { return }
         // Image only, never image + title: every image is drawn on a canvas at
         // least MenuBarIcon.pointSize wide, so the status item never changes width.
         let image: NSImage?
         if let countdown {
             image = Self.countdownImage(countdown)
-        } else if let state = Self.eyeState(engine) {
+        } else if let state = Self.eyeState(engine, suppressed: suppressed) {
             image = MenuBarIcon.image(for: state)
         } else {
             image = NSImage(systemSymbolName: Self.iconName(for: engine.phase),
@@ -302,12 +302,14 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     /// - Gray: closed — the break is due.
     /// - Snoozed: the iris is a pause sign; the lens keeps showing the fill that
     ///   resuming would pick up (the engine clears it if the pause runs long).
-    static func eyeState(_ engine: TwenEngine) -> EyeState? {
+    /// - Suppressed (call, presentation, fullscreen): the iris is a hollow
+    ///   square — stopped — over whatever the lens shows. A snooze outranks it.
+    static func eyeState(_ engine: TwenEngine, suppressed: Bool) -> EyeState? {
         let interval = engine.config.workInterval
         let fill = interval > 0 ? min(1, engine.accrued / interval) : 0
         switch engine.phase {
         case .waiting, .working, .paused:
-            return EyeState(fill: fill)
+            return EyeState(fill: fill, iris: suppressed ? .stop : .dot)
         case .ramping:
             return EyeState(fill: 1, lid: 1 - engine.rampProgress * (1 - TwenGlyph.lidClosed))
         case .gray:

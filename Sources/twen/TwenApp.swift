@@ -123,6 +123,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let pausedHalf = EyeState(fill: 0.5, iris: .pause)
         expect("paused eye: bar solid above the line", alpha(pausedHalf, x: 15, y: 16) > 0.8)
         expect("paused eye: bar is a hole below the line", alpha(pausedHalf, x: 15, y: 20) < 0.1)
+        let stopped = EyeState(fill: 0.5, iris: .stop)
+        // 4/18 square = 8px: strokes at px 14-15 and 20-21, hollow at 16-19; line at row 18.
+        expect("stopped eye: square ring solid above the line", alpha(stopped, x: 15, y: 16) > 0.8)
+        expect("stopped eye: ring hollow at its centre above the line", alpha(stopped, x: 18, y: 17) < 0.1)
+        expect("stopped eye: ring is a hole below the line", alpha(stopped, x: 15, y: 19) < 0.1)
+        expect("stopped eye: centre solid below the line", alpha(stopped, x: 18, y: 19) > 0.8)
         expect("distinct states get distinct images",
                MenuBarIcon.image(for: closed) !== MenuBarIcon.image(for: pausedHalf))
         expect("same state hits the cache",
