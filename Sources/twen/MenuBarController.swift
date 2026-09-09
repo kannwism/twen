@@ -281,21 +281,15 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         guard let button = statusItem.button else { return }
         // Image only, never image + title: every image is drawn on a canvas at
         // least MenuBarIcon.pointSize wide, so the status item never changes width.
-        let image: NSImage?
-        if let countdown {
-            image = Self.countdownImage(countdown)
-        } else if let state = Self.eyeState(engine, suppressed: suppressed) {
-            image = MenuBarIcon.image(for: state)
-        } else {
-            image = NSImage(systemSymbolName: Self.iconName(for: engine.phase),
-                            accessibilityDescription: "twen")
-        }
-        // The eye is cached per fill level; skip the redraw when nothing changed.
+        let image = countdown.map(Self.countdownImage)
+            ?? MenuBarIcon.image(for: Self.eyeState(engine, suppressed: suppressed))
+        // The eye is cached per state; skip the redraw when nothing changed.
         if button.image !== image { button.image = image }
     }
 
-    /// The eye for the engine's phase, or nil for the two phases that use
-    /// something else: the break countdown draws digits, break-satisfied a check.
+    /// The eye for the engine's phase. The running break draws its countdown
+    /// digits instead; the eye below is only its fallback for the instant before
+    /// the first countdown string is published.
     ///
     /// - Working: the lens fills with the share of the interval consumed.
     /// - Ramping: the lid comes down in step with the screen losing colour.
@@ -304,7 +298,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     ///   resuming would pick up (the engine clears it if the pause runs long).
     /// - Suppressed (call, presentation, fullscreen): the iris is a hollow
     ///   square — stopped — over whatever the lens shows. A snooze outranks it.
-    static func eyeState(_ engine: TwenEngine, suppressed: Bool) -> EyeState? {
+    /// - Break satisfied: the iris is a check. The lens is still full (accrued
+    ///   time resets on the next input), so the check shows as a hole until then.
+    static func eyeState(_ engine: TwenEngine, suppressed: Bool) -> EyeState {
         let interval = engine.config.workInterval
         let fill = interval > 0 ? min(1, engine.accrued / interval) : 0
         switch engine.phase {
@@ -316,18 +312,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             return EyeState(fill: 1, lid: TwenGlyph.lidClosed)
         case .snoozed:
             return EyeState(fill: fill, iris: .pause)
-        case .breakRunning, .breakSatisfied:
-            return nil
-        }
-    }
-
-    private static func iconName(for phase: TwenPhase) -> String {
-        switch phase {
-        case .breakRunning: "timer" // only before the first countdown publish
-        case .breakSatisfied: "checkmark.circle"
-        // Unreachable: eyeState covers these. Kept exhaustive so a new phase
-        // is a compile error here rather than a silent fallback.
-        case .waiting, .working, .paused, .ramping, .gray, .snoozed: "eye"
+        case .breakSatisfied:
+            return EyeState(fill: fill, iris: .check)
+        case .breakRunning:
+            return EyeState(fill: fill)
         }
     }
 

@@ -125,6 +125,25 @@ struct TwenGlyphTests {
         #expect(Self.alpha(half, ring.0, 0.58) < 30)         // below the line: hole
     }
 
+    @Test func checkIrisIsInkWhenEmptyAndItsExactNegativeWhenFull() {
+        let empty = Self.render(progress: 0, iris: .check)
+        let full = Self.render(progress: 1, iris: .check)
+        let lens = Self.render(progress: 1, iris: .none) // mask: solid lens interior only
+        // The check's bounding box, in pixels, with a one-pixel margin.
+        let half = (TwenGlyph.checkWidth / 2 + TwenGlyph.checkStroke) * Double(Self.px)
+        let lo = Int(0.5 * Double(Self.px) - half), hi = Int(0.5 * Double(Self.px) + half)
+        var ink = 0
+        for y in lo...hi { for x in lo...hi where lens[y * Self.px + x] == 255 {
+            let e = Int(empty[y * Self.px + x]), f = Int(full[y * Self.px + x])
+            ink += e
+            // Whatever the check adds when empty, it removes when full — per pixel.
+            #expect(abs(e + f - 255) <= 8, "pixel (\(x), \(y)): \(e) + \(f)")
+        } }
+        #expect(ink > 12 * 255, "a check at 36px should cover more than a dozen pixels")
+        #expect(Self.alpha(empty, 0.5, 0.75) < 30)   // nothing outside the box
+        #expect(Self.alpha(full, 0.5, 0.75) > 200)
+    }
+
     @Test func noIrisLeavesTheLensPlain() {
         let p = Self.render(progress: 0, iris: .none)
         #expect(Self.alpha(p, 0.5, 0.5) < 30)

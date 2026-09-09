@@ -15,10 +15,10 @@ import Foundation
 ///   = a slit. The iris stays round and disappears once the lid no longer fits
 ///   around it, the way an eyelid covers a pupil.
 /// - `iris`: a round pupil, a tiny pause sign (twen is paused), a hollow square
-///   (twen is stopped by a suppression signal), or none.
+///   (twen is stopped by a suppression signal), a check (break taken), or none.
 public enum TwenGlyph {
     public enum Iris: Hashable, Sendable {
-        case dot, pause, stop, none
+        case dot, pause, stop, check, none
     }
 
     /// Lens: intersection of two disks mirrored around x = 0.5.
@@ -42,6 +42,10 @@ public enum TwenGlyph {
     /// inverts it below the fill line into a square hole with a solid centre.
     static let stopOuter = 4.0 / 18.0
     static let stopStroke = 1.0 / 18.0
+    /// Check: 5/18 wide, 1/18 stroke, arms at 45° so its outline is a simple
+    /// hexagon — no self-overlap, which the even-odd fill would punch holes in.
+    static let checkWidth = 5.0 / 18.0
+    static let checkStroke = 1.0 / 18.0
 
     /// Where the two lens arcs meet at the top; the bottom tip is `1 - lensTop`.
     public static let lensTop: Double = {
@@ -111,11 +115,37 @@ public enum TwenGlyph {
             let outer = CGRect(x: 0.5 - stopOuter / 2, y: 0.5 - stopOuter / 2, width: stopOuter, height: stopOuter)
             ctx.addRect(outer)
             ctx.addRect(outer.insetBy(dx: stopStroke, dy: stopStroke))
+        case .check where lensHeight >= checkWidth * 1.15:
+            ctx.addPath(checkPath())
         default:
             break // lid too far down to show a pupil, or none requested
         }
         ctx.fillPath(using: .evenOdd)
         ctx.restoreGState()
+    }
+
+    /// The check as one closed hexagon: a short arm down-right into the corner,
+    /// a long arm up-right, both 45°, butt caps, mitred corner.
+    static func checkPath() -> CGPath {
+        let s = checkWidth, h = checkStroke / 2, r2 = 2.0.squareRoot()
+        let a = CGPoint(x: 0.5 - 0.5 * s, y: 0.5 - 0.025 * s)   // start of the short arm
+        let c = CGPoint(x: 0.5 - 0.15 * s, y: 0.5 + 0.325 * s)  // corner
+        let b = CGPoint(x: 0.5 + 0.5 * s, y: 0.5 - 0.325 * s)   // end of the long arm
+        let n1 = CGVector(dx: -h / r2, dy: h / r2)  // short arm's normal, half a stroke long
+        let n2 = CGVector(dx: h / r2, dy: h / r2)   // long arm's normal
+        let miter = CGVector(dx: 0, dy: h * r2)     // n1 + n2: the mitre at a right angle
+        func at(_ p: CGPoint, _ v: CGVector, _ sign: CGFloat) -> CGPoint {
+            CGPoint(x: p.x + sign * v.dx, y: p.y + sign * v.dy)
+        }
+        let path = CGMutablePath()
+        path.move(to: at(a, n1, 1))
+        path.addLine(to: at(c, miter, 1))
+        path.addLine(to: at(b, n2, 1))
+        path.addLine(to: at(b, n2, -1))
+        path.addLine(to: at(c, miter, -1))
+        path.addLine(to: at(a, n1, -1))
+        path.closeSubpath()
+        return path
     }
 
     private static func circle(_ cx: Double, _ cy: Double, _ r: Double) -> CGRect {
