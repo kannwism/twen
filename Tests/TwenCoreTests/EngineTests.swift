@@ -303,10 +303,48 @@ private struct Sim {
     sim.work(30)
     sim.send(.snoozeRequested(until: sim.now + 100))
     #expect(sim.lastEffects.isEmpty) // full color already; nothing to restore
-    sim.work(60) // typing away, still before the deadline
+    let carried = sim.engine.accrued // 28: the first working tick moves phase, not time
+    sim.work(40) // typing away, still before the deadline
+    #expect(sim.engine.phase == .snoozed)
+    #expect(sim.engine.accrued == carried) // carried into the pause, not growing
+    #expect(sim.collected.isEmpty)
+    sim.work(20) // the pause now spans idleReset: the carried time clears
     #expect(sim.engine.phase == .snoozed)
     #expect(sim.engine.accrued == 0)
-    #expect(sim.collected.isEmpty)
+}
+
+@Test func shortSnoozeMidIntervalResumesWhereItLeftOff() {
+    var sim = Sim()
+    sim.work(30)
+    let carried = sim.engine.accrued
+    sim.send(.snoozeRequested(until: nil))
+    sim.work(20) // well under idleReset
+    sim.send(.snoozeCancelled)
+    #expect(sim.engine.phase == .waiting)
+    #expect(sim.engine.accrued == carried)
+    sim.work(4) // first tick re-enters .working, second accrues
+    #expect(sim.engine.phase == .working)
+    #expect(sim.engine.accrued == carried + 2)
+}
+
+@Test func cancellingALongSnoozeClearsCarriedTime() {
+    var sim = Sim()
+    sim.work(30)
+    sim.send(.snoozeRequested(until: nil))
+    sim.wait(60) // no ticks at all (e.g. lid closed), then resume
+    sim.send(.snoozeCancelled)
+    #expect(sim.engine.phase == .waiting)
+    #expect(sim.engine.accrued == 0)
+}
+
+@Test func snoozeFromIdlePauseKeepsAccrued() {
+    var sim = Sim()
+    sim.work(30)
+    sim.goIdle(30) // past idlePause (20), under idleReset (60)
+    #expect(sim.engine.phase == .paused)
+    let carried = sim.engine.accrued
+    sim.send(.snoozeRequested(until: sim.now + 100))
+    #expect(sim.engine.accrued == carried)
 }
 
 @Test func snoozeExpiresToWaitingThenActivityResumesWork() {

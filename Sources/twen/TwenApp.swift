@@ -104,6 +104,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             expect("empty eye: iris opaque", irisAlpha > 0.8)
             expect("empty eye: lens clear", lensAlpha < 0.1)
         }
+        // States a launch never reaches: render them through the same cache and
+        // check the geometry, so a regression in the lid or pause paths can't hide.
+        func alpha(_ state: EyeState, x: Int, y: Int) -> CGFloat {
+            let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 36, pixelsHigh: 36,
+                                       bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+                                       isPlanar: false, colorSpaceName: .deviceRGB,
+                                       bytesPerRow: 0, bitsPerPixel: 0)!
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+            MenuBarIcon.image(for: state).draw(in: NSRect(x: 0, y: 0, width: 36, height: 36))
+            NSGraphicsContext.restoreGraphicsState()
+            return rep.colorAt(x: x, y: y)?.alphaComponent ?? -1
+        }
+        let closed = EyeState(fill: 1, lid: TwenGlyph.lidClosed)
+        expect("closed eye: slit at centre", alpha(closed, x: 18, y: 18) > 0.8)
+        expect("closed eye: lens above slit clear", alpha(closed, x: 18, y: 12) < 0.1)
+        let pausedHalf = EyeState(fill: 0.5, iris: .pause)
+        expect("paused eye: bar solid above the line", alpha(pausedHalf, x: 15, y: 16) > 0.8)
+        expect("paused eye: bar is a hole below the line", alpha(pausedHalf, x: 15, y: 20) < 0.1)
+        expect("distinct states get distinct images",
+               MenuBarIcon.image(for: closed) !== MenuBarIcon.image(for: pausedHalf))
+        expect("same state hits the cache",
+               MenuBarIcon.image(for: closed) === MenuBarIcon.image(for: EyeState(fill: 1, lid: TwenGlyph.lidClosed)))
         expect("item count", menuBar.menu.items.count == 10)
         expect("update item hidden without an update", menuBar.updateItem.isHidden)
         expect("status line disabled", !menuBar.statusLine.isEnabled)
@@ -141,9 +164,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Starts a real break (TWEN_FAST recommended) and samples the published menu
-    /// bar countdown once per second: every sample must be exactly two digits and
-    /// the sequence must decrease, and it must clear after the break ends. Guards
-    /// the fixed-width guarantee — a launch smoke test never sees this path.
+    /// bar countdown once per second: every sample must be two digits (or "XX"
+    /// for twenty) and the sequence must decrease, and it must clear after the
+    /// break ends. Guards the fixed-width guarantee — a launch smoke test never
+    /// sees this path.
     private func runCountdownProbe() {
         AppModel.shared.start()
         Task {
@@ -166,7 +190,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try? await Task.sleep(for: .seconds(max(breakLength - 5, 0) + 4))
             let cleared = model.menuCountdown == nil
             let allTwoDigits = !samples.isEmpty && samples.allSatisfy {
-                $0.count == 2 && $0.allSatisfy(\.isNumber)
+                $0 == "XX" || ($0.count == 2 && $0.allSatisfy(\.isNumber))
             }
             // 1s sampling aliases against a 1s display, so equal neighbors are
             // fine; the sequence must never increase and must move overall.

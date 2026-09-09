@@ -18,9 +18,10 @@ final class AppModel: ObservableObject {
     /// 2s, so `breakRemaining` moves in jumps; the popover derives a smooth 1s
     /// countdown from this date instead. Nil outside `.breakRunning`.
     @Published private(set) var breakEndEstimate: Date?
-    /// Seconds left in the running break as a zero-padded two-digit string
-    /// ("20", "09") for the menu bar label — always two digits so the status
-    /// item never changes width mid-countdown. Nil outside `.breakRunning`.
+    /// Seconds left in the running break as a two-character label for the menu
+    /// bar ("19", "09") — always two characters so the status item never changes
+    /// width mid-countdown. Twenty is "XX", the way the mark spells it.
+    /// Nil outside `.breakRunning`.
     @Published private(set) var menuCountdown: String?
     /// Non-nil exactly while the engine is snoozed; cleared on resume, expiry,
     /// or anything else that moves the engine out of `.snoozed`.
@@ -207,7 +208,8 @@ final class AppModel: ObservableObject {
     private func refreshMenuCountdown() {
         guard let end = breakEndEstimate else { return }
         let remaining = max(0, end.timeIntervalSinceNow.rounded(.up))
-        let text = String(format: "%02d", min(Int(remaining), 99))
+        let seconds = min(Int(remaining), 99)
+        let text = seconds == 20 ? "XX" : String(format: "%02d", seconds)
         if menuCountdown != text { menuCountdown = text }
     }
 

@@ -47,7 +47,7 @@ func render(px: Int) -> Data {
     ctx.saveGState()
     ctx.translateBy(x: (canvas - mark) / 2, y: (canvas + mark) / 2)
     ctx.scaleBy(x: mark, y: -mark)
-    TwenGlyph.draw(fillLineY: TwenGlyph.fillLineY(progress: 0.5), in: ctx)
+    TwenGlyph.draw(fillLineY: TwenGlyph.fillLineY(progress: 0.5), lid: 1, iris: .dot, in: ctx)
     ctx.restoreGState()
 
     NSGraphicsContext.restoreGraphicsState()

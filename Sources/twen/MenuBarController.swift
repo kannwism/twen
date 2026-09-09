@@ -284,8 +284,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         let image: NSImage?
         if let countdown {
             image = Self.countdownImage(countdown)
-        } else if let progress = Self.eyeProgress(engine) {
-            image = MenuBarIcon.eye(progress: progress)
+        } else if let state = Self.eyeState(engine) {
+            image = MenuBarIcon.image(for: state)
         } else {
             image = NSImage(systemSymbolName: Self.iconName(for: engine.phase),
                             accessibilityDescription: "twen")
@@ -294,44 +294,55 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         if button.image !== image { button.image = image }
     }
 
-    /// How full the eye is — the share of the work interval consumed — or nil
-    /// for the phases the eye doesn't express yet (break states, snooze), which
-    /// keep their SF Symbols until the design covers them.
-    private static func eyeProgress(_ engine: TwenEngine) -> Double? {
+    /// The eye for the engine's phase, or nil for the two phases that use
+    /// something else: the break countdown draws digits, break-satisfied a check.
+    ///
+    /// - Working: the lens fills with the share of the interval consumed.
+    /// - Ramping: the lid comes down in step with the screen losing colour.
+    /// - Gray: closed — the break is due.
+    /// - Snoozed: the iris is a pause sign; the lens keeps showing the fill that
+    ///   resuming would pick up (the engine clears it if the pause runs long).
+    static func eyeState(_ engine: TwenEngine) -> EyeState? {
+        let interval = engine.config.workInterval
+        let fill = interval > 0 ? min(1, engine.accrued / interval) : 0
         switch engine.phase {
         case .waiting, .working, .paused:
-            let interval = engine.config.workInterval
-            return interval > 0 ? min(1, engine.accrued / interval) : 0
-        case .ramping, .gray:
-            return 1
-        case .breakRunning, .breakSatisfied, .snoozed:
+            return EyeState(fill: fill)
+        case .ramping:
+            return EyeState(fill: 1, lid: 1 - engine.rampProgress * (1 - TwenGlyph.lidClosed))
+        case .gray:
+            return EyeState(fill: 1, lid: TwenGlyph.lidClosed)
+        case .snoozed:
+            return EyeState(fill: fill, iris: .pause)
+        case .breakRunning, .breakSatisfied:
             return nil
         }
     }
 
     private static func iconName(for phase: TwenPhase) -> String {
         switch phase {
-        case .breakRunning: "timer"
+        case .breakRunning: "timer" // only before the first countdown publish
         case .breakSatisfied: "checkmark.circle"
-        case .snoozed: "zzz"
-        // Unreachable: eyeProgress covers these. Kept exhaustive so a new phase
+        // Unreachable: eyeState covers these. Kept exhaustive so a new phase
         // is a compile error here rather than a silent fallback.
-        case .waiting, .working, .paused, .ramping, .gray: "eye"
+        case .waiting, .working, .paused, .ramping, .gray, .snoozed: "eye"
         }
     }
 
-    /// The two digits rendered at menu bar text size on a canvas sized for "00",
-    /// and never narrower than the eye so the phase change doesn't shift the bar.
-    /// Monospaced digits make every pair the same width, but the fixed canvas is
-    /// what guarantees it. Template image, so the system tints it like any icon.
+    /// The countdown rendered at menu bar text size on a canvas sized for the
+    /// widest label ("00" or "XX") and never narrower than the eye, so neither
+    /// the ticking nor the phase change shifts the bar. Monospaced digits make
+    /// every pair the same width, but the fixed canvas is what guarantees it.
+    /// Template image, so the system tints it like any icon.
     private static func countdownImage(_ text: String) -> NSImage {
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .medium),
             .foregroundColor: NSColor.black,
         ]
-        let canvas = ("00" as NSString).size(withAttributes: attributes)
-        let size = NSSize(width: max(ceil(canvas.width), MenuBarIcon.pointSize),
-                          height: ceil(canvas.height))
+        let digits = ("00" as NSString).size(withAttributes: attributes)
+        let roman = ("XX" as NSString).size(withAttributes: attributes)
+        let size = NSSize(width: max(ceil(digits.width), ceil(roman.width), MenuBarIcon.pointSize),
+                          height: ceil(max(digits.height, roman.height)))
         let image = NSImage(size: size, flipped: false) { rect in
             let textSize = (text as NSString).size(withAttributes: attributes)
             (text as NSString).draw(
