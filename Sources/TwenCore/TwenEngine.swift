@@ -11,6 +11,10 @@ public struct EngineConfig: Equatable, Sendable {
     /// timer shouldn't reset quickly), but a minute genuinely away rests the eyes.
     public var breakSatisfyIdle: TimeInterval
     public var satisfiedRestore: TimeInterval
+    /// How fast colour comes back when a suppression signal (call, presentation,
+    /// fullscreen) appears mid-fade or while gray. Quick, so the screen is never
+    /// gray in front of an audience, but still a ramp like everything else.
+    public var suppressedRestore: TimeInterval
 
     public init(
         workInterval: TimeInterval = 20 * 60,
@@ -19,7 +23,8 @@ public struct EngineConfig: Equatable, Sendable {
         idlePause: TimeInterval = 60,
         idleReset: TimeInterval = 3 * 60,
         breakSatisfyIdle: TimeInterval = 60,
-        satisfiedRestore: TimeInterval = 5
+        satisfiedRestore: TimeInterval = 5,
+        suppressedRestore: TimeInterval = 2
     ) {
         self.workInterval = workInterval
         self.breakLength = breakLength
@@ -28,6 +33,7 @@ public struct EngineConfig: Equatable, Sendable {
         self.idleReset = idleReset
         self.breakSatisfyIdle = breakSatisfyIdle
         self.satisfiedRestore = satisfiedRestore
+        self.suppressedRestore = suppressedRestore
     }
 
     /// Compressed timings for demos and end-to-end testing (TWEN_FAST=1).
@@ -89,7 +95,6 @@ public struct TwenEngine: Sendable {
     /// When the current snooze began; drives the idleReset-style clearing of
     /// accrued time while paused.
     private var snoozedAt: Date?
-    private var wasSuppressed = false
     /// When the display is (or will be) back at full color, derived from the effects
     /// this engine has emitted: a restore ramp lands `over` seconds after it was issued;
     /// a ramp toward gray or a hold means no restore is scheduled (nil). Restores gate
@@ -136,7 +141,6 @@ public struct TwenEngine: Sendable {
         // Clamp dt so a missed stretch of ticks (coalesced timers, debugger) can't teleport the timer.
         let dt = min(max(lastTick.map { now.timeIntervalSince($0) } ?? 0, 0), 10)
         lastTick = now
-        defer { wasSuppressed = suppressed }
 
         var effects: [EngineEffect] = []
         switch phase {
@@ -170,17 +174,18 @@ public struct TwenEngine: Sendable {
                 phase = .breakSatisfied
                 effects.append(.hold(atSaturation: saturation))
             } else if suppressed {
-                if !wasSuppressed { effects.append(.hold(atSaturation: saturation)) }
+                effects.append(cancelRamp())
             } else {
-                if wasSuppressed {
-                    effects.append(.ramp(toSaturation: 0, over: config.rampDuration * (1 - rampProgress)))
-                }
                 rampProgress = min(1, rampProgress + dt / config.rampDuration)
                 if rampProgress >= 1 { phase = .gray }
             }
 
         case .gray:
-            if idle >= config.breakSatisfyIdle { phase = .breakSatisfied }
+            if idle >= config.breakSatisfyIdle {
+                phase = .breakSatisfied
+            } else if suppressed {
+                effects.append(cancelRamp())
+            }
 
         case .breakSatisfied:
             if idle < config.idlePause {
@@ -205,6 +210,17 @@ public struct TwenEngine: Sendable {
             }
         }
         return effects
+    }
+
+    /// A suppression signal while fading or gray: colour comes back quickly and
+    /// the timer waits, still full, in `.working` for the signal to clear — the
+    /// ramp then starts over from the top, exactly as if it had never begun.
+    /// Consistent with a ramp never *starting* under suppression, and it never
+    /// leaves a half-gray screen in front of an audience.
+    private mutating func cancelRamp() -> EngineEffect {
+        rampProgress = 0
+        phase = .working
+        return .ramp(toSaturation: 1, over: config.suppressedRestore)
     }
 
     // MARK: - Discrete events
