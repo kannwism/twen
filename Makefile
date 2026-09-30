@@ -2,7 +2,7 @@ APP := build/twen.app
 ICON := build/twen.icns
 ICON_SRCS := Support/AppIcon.swift Sources/TwenCore/TwenGlyph.swift
 
-.PHONY: app run test clean
+.PHONY: app run test clean readme-icons
 
 app: $(ICON)
 	swift build -c release
@@ -21,6 +21,13 @@ $(ICON): $(ICON_SRCS)
 	swiftc -O $(ICON_SRCS) -o build/appicon
 	build/appicon build/twen.iconset
 	iconutil -c icns build/twen.iconset -o $(ICON)
+
+# The README's menu bar state images, drawn from the same glyph (see
+# Support/ReadmeIcons.swift). Committed, so rerun this when the glyph changes.
+readme-icons:
+	mkdir -p build
+	swiftc -O Support/ReadmeIcons.swift Sources/TwenCore/TwenGlyph.swift -o build/readmeicons
+	build/readmeicons docs/icons
 
 run: app
 	open $(APP)
