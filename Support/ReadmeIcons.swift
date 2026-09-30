@@ -27,7 +27,6 @@ let icons: [(name: String, icon: Icon)] = [
     ("ramping", .eye(fill: 1, lid: 1 - 0.5 * (1 - TwenGlyph.lidClosed))),
     ("gray", .eye(fill: 1, lid: TwenGlyph.lidClosed)),
     ("countdown-xx", .countdown("XX")),
-    ("countdown-15", .countdown("15")),
     ("satisfied", .eye(fill: 1, iris: .check)),  // accrued stays full until the next input
     ("paused", .eye(fill: 0.5, iris: .pause)),
     ("suppressed", .eye(fill: 0.5, iris: .stop)),
